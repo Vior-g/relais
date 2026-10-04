@@ -1,0 +1,74 @@
+# Compile Relais sur un PC Windows de GitHub à chaque modification,
+# et publie Relais.exe + Relais-Setup.exe dans une Release (ce qui alimente les mises à jour auto).
+#
+# Deux façons de publier une version :
+#  - GitHub Desktop : créer un tag « v2.0.2 » sur le dernier commit, puis « Push origin »
+#    -> la Release est créée automatiquement avec les fichiers.
+#  - Site github.com : Releases > Draft a new release > tag « v2.0.2 » > Publish release.
+name: Build Relais
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: relais-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.release.tag_name || github.ref_name }}
+  IS_RELEASE: ${{ github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Numéro de version depuis le tag (v2.0.2 -> 2.0.2.0)
+        if: env.IS_RELEASE == 'true'
+        shell: pwsh
+        run: |
+          $v = "$env:TAG".TrimStart('v','V')
+          $parts = @($v.Split('-')[0].Split('.'))
+          while ($parts.Count -lt 4) { $parts += '0' }
+          $full = ($parts[0..3] -join '.')
+          (Get-Content AssemblyInfo.cs -Encoding UTF8) -replace '\d+\.\d+\.\d+\.\d+', $full | Set-Content AssemblyInfo.cs -Encoding UTF8
+          Write-Host "Version : $full"
+
+      - name: Compiler Relais.exe (compilateur C# fourni avec Windows)
+        shell: cmd
+        run: |
+          mkdir build
+          "%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /optimize+ /codepage:65001 /win32icon:relais.ico /out:build\Relais.exe /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll *.cs
+
+      - name: Créer l'installateur (Inno Setup)
+        shell: cmd
+        run: |
+          choco install innosetup -y --no-progress
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\relais.iss
+
+      - name: Garder les fichiers (onglet Actions > ce build > Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Relais
+          path: |
+            build/Relais.exe
+            build/Relais-Setup.exe
+
+      - name: Créer / compléter la Release
+        if: env.IS_RELEASE == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: Relais ${{ env.TAG }}
+          files: |
+            build/Relais.exe
+            build/Relais-Setup.exe
