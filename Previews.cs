@@ -108,6 +108,7 @@ namespace Relais
         {
             this.app = app;
             Text = "Relais — aperçus en direct";
+            Chrome.Hook(this);
             Icon = app.AppIcon;
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;

@@ -328,11 +328,7 @@ namespace Relais
 
         static Label Title(string t)
         {
-            Label l = new Label();
-            l.UseMnemonic = false; l.Text = t.ToUpperInvariant(); l.Font = Theme.Section; l.ForeColor = Theme.Faint;
-            l.AutoSize = false; l.Height = Theme.S(30); l.TextAlign = ContentAlignment.BottomLeft;
-            l.Padding = new Padding(0, 0, 0, Theme.S(4));
-            return l;
+            return new OrnamentTitle(t);
         }
 
         static Panel Space(int h) { Panel p = new Panel(); p.Height = Theme.S(h); return p; }

@@ -13,7 +13,8 @@ namespace Relais
         readonly App app;
         public bool AllowClose;
 
-        TabStrip tabs;
+        SideNav tabs;
+        TitleBar titleBar;
         Panel[] pages;
         ComboBox profiles;
         MemberList list;
@@ -41,8 +42,10 @@ namespace Relais
             ForeColor = Theme.Text;
             Font = Theme.Normal;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(Theme.S(600), Theme.S(700));
-            MinimumSize = new Size(Theme.S(540), Theme.S(560));
+            FormBorderStyle = FormBorderStyle.None;
+            Padding = new Padding(Theme.S(4));
+            ClientSize = new Size(Theme.S(800), Theme.S(720));
+            MinimumSize = new Size(Theme.S(700), Theme.S(560));
             DoubleBuffered = true;
             Build();
             app.StateChanged += delegate { if (Visible) { list.Invalidate(); UpdateStatus(); } };
@@ -57,6 +60,7 @@ namespace Relais
             base.OnHandleCreated(e);
             try
             {
+                Chrome.Round(Handle);
                 shellMsg = Native.RegisterWindowMessage("SHELLHOOK");
                 Native.RegisterShellHookWindow(Handle);
             }
@@ -69,8 +73,58 @@ namespace Relais
             base.OnHandleDestroyed(e);
         }
 
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ClassStyle |= 0x20000;                     // CS_DROPSHADOW : ombre portée
+                cp.Style |= 0x00020000 | 0x00010000 | 0x00080000; // réduire / agrandir / menu système (barre des tâches)
+                return cp;
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            using (Pen p = new Pen(Theme.Border)) e.Graphics.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
+        }
+
+        void FixMaxBounds()
+        {
+            Screen scr = Screen.FromHandle(Handle);
+            Rectangle wa = scr.WorkingArea;
+            MaximizedBounds = new Rectangle(wa.X - scr.Bounds.X, wa.Y - scr.Bounds.Y, wa.Width, wa.Height);
+        }
+
+        protected override void OnMove(EventArgs e)
+        {
+            base.OnMove(e);
+            if (IsHandleCreated && WindowState == FormWindowState.Normal) FixMaxBounds();
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            Padding = WindowState == FormWindowState.Maximized ? new Padding(0) : new Padding(Theme.S(4));
+            Invalidate();
+            if (titleBar != null) titleBar.Invalidate();
+        }
+
         protected override void WndProc(ref Message m)
         {
+            if (m.Msg == 0x0084 /*WM_NCHITTEST*/ && WindowState == FormWindowState.Normal)
+            {
+                base.WndProc(ref m);
+                Point p = PointToClient(new Point((short)(m.LParam.ToInt64() & 0xFFFF), (short)((m.LParam.ToInt64() >> 16) & 0xFFFF)));
+                int b = Theme.S(6);
+                bool l = p.X < b, r = p.X >= ClientSize.Width - b, t = p.Y < b, bo = p.Y >= ClientSize.Height - b;
+                if (t && l) m.Result = (IntPtr)13; else if (t && r) m.Result = (IntPtr)14;
+                else if (bo && l) m.Result = (IntPtr)16; else if (bo && r) m.Result = (IntPtr)17;
+                else if (l) m.Result = (IntPtr)10; else if (r) m.Result = (IntPtr)11;
+                else if (t) m.Result = (IntPtr)12; else if (bo) m.Result = (IntPtr)15;
+                return;
+            }
             if (shellMsg != 0 && m.Msg == shellMsg)
             {
                 try { app.OnShellMessage((int)(m.WParam.ToInt64() & 0xFFFF), m.LParam); } catch (Exception ex) { Program.Log("Shell : " + ex.Message); }
@@ -83,16 +137,7 @@ namespace Relais
 
         static Label SectionTitle(string t)
         {
-            Label l = new Label();
-            l.UseMnemonic = false;
-            l.Text = t.ToUpperInvariant();
-            l.Font = Theme.Section;
-            l.ForeColor = Theme.Faint;
-            l.AutoSize = false;
-            l.Height = Theme.S(30);
-            l.TextAlign = ContentAlignment.BottomLeft;
-            l.Padding = new Padding(0, 0, 0, Theme.S(4));
-            return l;
+            return new OrnamentTitle(t);
         }
 
         static Label Hint(string t)
@@ -150,42 +195,33 @@ namespace Relais
 
         void Build()
         {
-            // --- En-tête
-            Panel header = new Panel();
-            header.Dock = DockStyle.Top;
-            header.Height = Theme.S(66);
-            header.BackColor = Theme.Bg;
-            header.Paint += delegate (object s, PaintEventArgs e)
+            // --- Barre de titre sur-mesure
+            titleBar = new TitleBar(this);
+            titleBar.OnToggleMax = delegate
             {
-                Graphics g = e.Graphics;
-                Theme.Hq(g);
-                int x = Theme.S(18), y = Theme.S(18);
-                g.DrawIcon(Theme.MakeIcon(Theme.S(34)), x, y);
-                Theme.DrawText(g, "Relais", Theme.Title, Theme.Text, new Rectangle(x + Theme.S(44), y - Theme.S(4), Theme.S(200), Theme.S(28)), TextFormatFlags.Left);
-                Theme.DrawText(g, "Organizer multicompte pour Dofus · v" + typeof(MainForm).Assembly.GetName().Version.ToString(3), Theme.Small, Theme.Muted,
-                    new Rectangle(x + Theme.S(46), y + Theme.S(22), Theme.S(320), Theme.S(18)), TextFormatFlags.Left);
+                FixMaxBounds();
+                WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
             };
             pauseBtn = new FlatButton("Pause");
+            pauseBtn.Width = Theme.S(96);
+            pauseBtn.Click += delegate { app.TogglePause(); };
             FlatButton prevBtn = new FlatButton("Aperçus");
+            prevBtn.Width = Theme.S(96);
             prevBtn.Click += delegate { app.TogglePreviewWall(); };
             new ToolTip().SetToolTip(prevBtn, "Aperçus en direct de tous tes comptes (idéal sur un 2e écran)");
-            header.Controls.Add(prevBtn);
-            header.Resize += delegate
-            {
-                pauseBtn.SetBounds(header.Width - Theme.S(18) - Theme.S(110), Theme.S(18), Theme.S(110), Theme.S(32));
-                prevBtn.SetBounds(header.Width - Theme.S(18) - Theme.S(228), Theme.S(18), Theme.S(110), Theme.S(32));
-            };
-            pauseBtn.Click += delegate { app.TogglePause(); };
-            header.Controls.Add(pauseBtn);
+            titleBar.AddAction(prevBtn);
+            titleBar.AddAction(pauseBtn);
 
-            tabs = new TabStrip();
-            tabs.Dock = DockStyle.Top;
+            // --- Navigation latérale
+            tabs = new SideNav();
+            tabs.Dock = DockStyle.Left;
             tabs.Tabs.Add("Team");
             tabs.Tabs.Add("Raccourcis");
             tabs.Tabs.Add("Minuteurs");
             tabs.Tabs.Add("Craft");
             tabs.Tabs.Add("Stats");
             tabs.Tabs.Add("Options");
+            tabs.Footer = "Une touche = une fenêtre. Relais ne joue jamais à ta place.";
             tabs.SelectedChanged += delegate { ShowPage(tabs.Selected); app.CancelCapture(); app.S.LastTab = tabs.Selected; };
 
             Panel host = new Panel();
@@ -211,7 +247,7 @@ namespace Relais
             Controls.Add(host);
             Controls.Add(foot);
             Controls.Add(tabs);
-            Controls.Add(header);
+            Controls.Add(titleBar);
 
             int t = app.S.LastTab;
             tabs.Selected = t;
@@ -833,6 +869,7 @@ namespace Relais
             using (Form f = new Form())
             {
                 f.Text = "Relais — diagnostic des fenêtres";
+                Chrome.Hook(f);
                 f.StartPosition = FormStartPosition.CenterParent;
                 f.BackColor = Theme.Bg; f.ForeColor = Theme.Text; f.Font = Theme.Normal;
                 f.ClientSize = new Size(Theme.S(620), Theme.S(420));
@@ -909,6 +946,12 @@ namespace Relais
         {
             base.OnVisibleChanged(e);
             if (Visible) { list.Invalidate(); UpdateStatus(); }
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (app.HandleCaptureKey(keyData)) return true;
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         protected override void OnDeactivate(EventArgs e)

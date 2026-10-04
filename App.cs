@@ -22,7 +22,7 @@ namespace Relais
         Dictionary<string, Action> bindings = new Dictionary<string, Action>();
         string pauseKey;
 
-        readonly InputHook hook;
+        InputHook hook;
         readonly SynchronizationContext ui;
         readonly System.Windows.Forms.Timer timer;
         readonly NotifyIcon tray;
@@ -66,9 +66,9 @@ namespace Relais
 
             hook = new InputHook();
             hook.OnHotkey = OnHotkey;
-            if (!hook.Installed)
-                MessageBox.Show("Impossible d'installer l'écoute des raccourcis.\nEssaie de relancer Relais.", "Relais",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Program.Log("Écoute des raccourcis : " + hook.Status);
+            if (!hook.Installed) RetryHook(1);
+            else if (!hook.MouseOk) Program.Log("Boutons de souris indisponibles comme raccourcis (code " + hook.MsError + ")");
 
             // Icône de notification
             ContextMenuStrip menu = new ContextMenuStrip();
@@ -262,7 +262,7 @@ namespace Relais
             }
             IntPtr fg = Native.GetForegroundWindow();
             if (fg != ForegroundHandle) { ForegroundHandle = fg; changed = true; }
-            if (changed || full) { UpdateLastActive(); ApplyPriority(false); ApplyAudio(false); }
+            if (changed || full) { UpdateLastActive(); ApplyPriority(false); ApplyAudio(false); UpdateFallbackRegistration(); }
             AccumulateStats();
             ExpireFlashing();
             if (scanTick % 4 == 1) CheckTimers();
@@ -872,7 +872,8 @@ namespace Relais
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
             bool? me = Native.IsElevated((uint)System.Diagnostics.Process.GetCurrentProcess().Id);
             sb.Append("Relais " + typeof(App).Assembly.GetName().Version + " — admin : " + (me == true ? "OUI" : "non") + "\r\n");
-            sb.Append("Windows " + Environment.OSVersion.Version + "\r\n");
+            sb.Append("Windows " + Environment.OSVersion.Version + (Environment.Is64BitProcess ? " · 64 bits" : " · 32 bits") + "\r\n");
+            sb.Append("Écoute des raccourcis : " + HookStatus + "\r\n");
             foreach (Screen sc in Screen.AllScreens)
                 sb.Append("Écran " + sc.DeviceName + " : " + sc.Bounds.Width + "×" + sc.Bounds.Height + " à " + sc.Bounds.X + "," + sc.Bounds.Y + (sc.Primary ? " (principal)" : "") + "\r\n");
             sb.Append("\r\n" + Windows.Count + " fenêtre(s) Dofus détectée(s) :\r\n");
@@ -978,6 +979,7 @@ namespace Relais
         public void Quit()
         {
             timer.Stop();
+            if (fallback != null) try { fallback.Dispose(); } catch { }
             try { ApplyPriority(true); } catch { }
             try
             {
@@ -1041,12 +1043,81 @@ namespace Relais
             Hotkey p = Hotkey.Parse(S.KeyPause);
             pauseKey = p == null ? null : p.ToString();
             bindings = b;
+            if (fallback != null) fallback.Rebuild(b);
         }
 
         static void Bind(Dictionary<string, Action> b, string key, Action a)
         {
             Hotkey hk = Hotkey.Parse(key);
             if (hk != null) b[hk.ToString()] = a;
+        }
+
+        // ---------------- écoute des raccourcis : nouvel essai puis mode de secours ----------------
+
+        FallbackHotkeys fallback;
+        public string HookStatus { get { return hook == null ? "non démarrée" : hook.Status + (fallback != null ? " — mode de secours (clavier via Windows)" : ""); } }
+
+        void RetryHook(int attempt)
+        {
+            System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
+            t.Interval = 1000;
+            t.Tick += delegate
+            {
+                t.Stop(); t.Dispose();
+                if (hook != null && hook.Installed) return;
+                InputHook h = new InputHook();
+                if (h.Installed)
+                {
+                    if (hook != null) hook.Dispose();
+                    hook = h;
+                    hook.OnHotkey = OnHotkey;
+                    Program.Log("Écoute des raccourcis installée au essai " + (attempt + 1));
+                    return;
+                }
+                h.Dispose();
+                if (attempt < 4) { RetryHook(attempt + 1); return; }
+                Program.Log("Écoute des raccourcis impossible : " + hook.Status + " — passage en mode de secours");
+                try { fallback = new FallbackHotkeys(this); fallback.Rebuild(bindings); UpdateFallbackRegistration(); }
+                catch (Exception ex) { Program.Log("Mode de secours : " + ex.Message); fallback = null; }
+                Toast.ShowMessage("Raccourcis en mode de secours : clavier uniquement (boutons de souris indisponibles)", true, 8);
+            };
+            t.Start();
+        }
+
+        /// <summary>Raccourci reçu par le mode de secours (RegisterHotKey).</summary>
+        public void OnFallbackHotkey(string id)
+        {
+            Action a;
+            if (!bindings.TryGetValue(id, out a)) return;
+            bool isPause = string.Equals(id, pauseKey, StringComparison.OrdinalIgnoreCase);
+            if (Paused && !isPause) return;
+            a();
+        }
+
+        /// <summary>Capture d'un raccourci au clavier quand l'écoute globale n'est pas disponible.</summary>
+        public bool HandleCaptureKey(Keys keyData)
+        {
+            if (capturingBox == null || (hook != null && hook.Installed)) return false;
+            Keys key = keyData & Keys.KeyCode;
+            if (key == Keys.ControlKey || key == Keys.ShiftKey || key == Keys.Menu || key == Keys.LWin || key == Keys.RWin) return true;
+            int mods = 0;
+            if ((keyData & Keys.Control) != 0) mods |= Hotkey.CTRL;
+            if ((keyData & Keys.Alt) != 0) mods |= Hotkey.ALT;
+            if ((keyData & Keys.Shift) != 0) mods |= Hotkey.SHIFT;
+            HotkeyBox box = capturingBox;
+            capturingBox = null;
+            if (mods == 0 && key == Keys.Escape) { box.Cancel(); return true; }
+            if (mods == 0 && (key == Keys.Back || key == Keys.Delete)) { box.SetFromCapture(null); return true; }
+            box.SetFromCapture(new Hotkey(mods, key.ToString()).ToString());
+            return true;
+        }
+
+        void UpdateFallbackRegistration()
+        {
+            if (fallback == null) return;
+            IntPtr fg = Native.GetForegroundWindow();
+            bool want = !S.OnlyWhenDofusFocused || dofusHandles.Contains(fg) || fg == mainHandle || fg == barHandle;
+            fallback.SetActive(want);
         }
 
         /// <summary>Appelé depuis le hook : doit rester très rapide.</summary>
@@ -1071,9 +1142,9 @@ namespace Relais
 
         public void Capture(HotkeyBox box)
         {
-            if (hook == null) { box.Cancel(); return; }
             if (capturingBox != null && capturingBox != box) capturingBox.Cancel();
             capturingBox = box;
+            if (hook == null || !hook.Installed) return; // capture par la fenêtre (HandleCaptureKey)
             hook.CaptureCallback = delegate (Hotkey hk)
             {
                 ui.Post(delegate
@@ -1154,6 +1225,87 @@ namespace Relais
                 }
                 catch (Exception ex) { Program.Log("Autostart : " + ex.Message); }
             }
+        }
+    }
+
+    /// <summary>
+    /// Mode de secours si Windows refuse l'écoute globale du clavier/souris :
+    /// raccourcis clavier enregistrés auprès de Windows (RegisterHotKey). Pas de boutons de souris dans ce mode.
+    /// </summary>
+    public sealed class FallbackHotkeys : NativeWindow, IDisposable
+    {
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)] static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr h, int id);
+
+        readonly App app;
+        readonly Dictionary<int, string> ids = new Dictionary<int, string>();
+        List<string> keys = new List<string>();
+        bool active;
+
+        public FallbackHotkeys(App app)
+        {
+            this.app = app;
+            CreateParams cp = new CreateParams();
+            cp.Caption = "RelaisHotkeys";
+            CreateHandle(cp);
+        }
+
+        public void Rebuild(Dictionary<string, Action> bindings)
+        {
+            keys = new List<string>(bindings.Keys);
+            if (active) { UnregisterAll(); RegisterAll(); }
+        }
+
+        public void SetActive(bool on)
+        {
+            if (on == active) return;
+            active = on;
+            if (on) RegisterAll(); else UnregisterAll();
+        }
+
+        void RegisterAll()
+        {
+            int id = 1;
+            foreach (string k in keys)
+            {
+                Hotkey hk = Hotkey.Parse(k);
+                if (hk == null || hk.IsMouse) continue;
+                Keys vk;
+                try { vk = (Keys)Enum.Parse(typeof(Keys), hk.Key, true); } catch { continue; }
+                uint mods = 0x4000; // MOD_NOREPEAT
+                if ((hk.Mods & Hotkey.ALT) != 0) mods |= 1;
+                if ((hk.Mods & Hotkey.CTRL) != 0) mods |= 2;
+                if ((hk.Mods & Hotkey.SHIFT) != 0) mods |= 4;
+                if ((hk.Mods & Hotkey.WIN) != 0) mods |= 8;
+                bool ok = false;
+                try { ok = RegisterHotKey(Handle, id, mods, (uint)vk); } catch (Exception ex) { Program.Log("RegisterHotKey : " + ex.Message); return; }
+                if (ok) ids[id] = hk.ToString();
+                else Program.Log("Raccourci de secours refusé : " + hk.Display() + " (déjà pris par une autre appli ?)");
+                id++;
+            }
+        }
+
+        void UnregisterAll()
+        {
+            foreach (int id in ids.Keys) { try { UnregisterHotKey(Handle, id); } catch { } }
+            ids.Clear();
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == 0x0312) // WM_HOTKEY
+            {
+                string k;
+                if (ids.TryGetValue(m.WParam.ToInt32(), out k)) app.OnFallbackHotkey(k);
+                return;
+            }
+            base.WndProc(ref m);
+        }
+
+        public void Dispose()
+        {
+            UnregisterAll();
+            DestroyHandle();
         }
     }
 

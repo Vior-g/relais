@@ -89,6 +89,7 @@ namespace Relais
                 Color bg = i == hover && !dragging ? Theme.Hover : Theme.Panel;
                 if (dragging && i == dragFrom) bg = Theme.Panel2;
                 Theme.FillRound(g, bg, r, Theme.S(10));
+                Theme.StrokeRound(g, Color.FromArgb(110, Theme.Border), 1f, new RectangleF(r.X + 0.5f, r.Y + 0.5f, r.Width - 1, r.Height - 1), Theme.S(10));
                 if (active) Theme.StrokeRound(g, Theme.Accent, 1.6f, new RectangleF(r.X + 0.8f, r.Y + 0.8f, r.Width - 1.6f, r.Height - 1.6f), Theme.S(10));
 
                 // poignée

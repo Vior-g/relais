@@ -20,12 +20,7 @@ namespace Relais
 
         public static Label Title(string t)
         {
-            Label l = new Label();
-            l.UseMnemonic = false;
-            l.Text = t.ToUpperInvariant(); l.Font = Theme.Section; l.ForeColor = Theme.Faint;
-            l.AutoSize = false; l.Height = Theme.S(30); l.TextAlign = ContentAlignment.BottomLeft;
-            l.Padding = new Padding(0, 0, 0, Theme.S(4));
-            return l;
+            return new OrnamentTitle(t);
         }
 
         public static Label Hint(string t, int h)
@@ -143,6 +138,7 @@ namespace Relais
                 sheet.DailyDate = App.Today;
             }
             Text = "Fiche — " + name;
+            Chrome.Hook(this);
             Icon = app.AppIcon;
             BackColor = Theme.Bg; ForeColor = Theme.Text; Font = Theme.Normal;
             StartPosition = FormStartPosition.CenterParent;

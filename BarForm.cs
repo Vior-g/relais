@@ -57,11 +57,11 @@ namespace Relais
 
         bool Vertical { get { return app.S.BarVertical; } }
         bool Names { get { return app.S.BarShowNames; } }
-        int Grip { get { return Theme.S(14); } }
+        int Grip { get { return Theme.S(26); } }
         int Pad { get { return Theme.S(6); } }
-        int TileW { get { return Names ? (Vertical ? Theme.S(150) : Theme.S(118)) + (app.S.BarLarge ? Theme.S(12) : 0) : TileH; } }
-        int TileH { get { return Theme.S(app.S.BarLarge ? 56 : 44); } }
-        int Av { get { return Theme.S(app.S.BarLarge ? 40 : 30); } }
+        int Av { get { return Theme.S(app.S.BarLarge ? 44 : 34); } }
+        int TileH { get { return Av + Theme.S(14); } }
+        int TileW { get { return Names ? Av + Theme.S(Vertical ? 112 : 92) : TileH; } }
 
         public void ApplyLook()
         {
@@ -126,20 +126,20 @@ namespace Relais
             g.Clear(BackColor);
             Theme.Hq(g);
             RectangleF all = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
-            Theme.FillRound(g, Theme.Bg, all, Theme.S(10));
-            Theme.StrokeRound(g, app.Paused ? Theme.Accent : Theme.Border, 1f, all, Theme.S(10));
+            float rad = Vertical ? Theme.S(16) : Height / 2f;
+            // fond bois + liseré doré
+            using (System.Drawing.Drawing2D.GraphicsPath bgp = Theme.Round(all, rad))
+            using (System.Drawing.Drawing2D.LinearGradientBrush lb = new System.Drawing.Drawing2D.LinearGradientBrush(
+                new RectangleF(0, 0, Width, Height), Theme.Panel2, Theme.Sidebar, Vertical ? 0f : 90f))
+                g.FillPath(lb, bgp);
+            Theme.StrokeRound(g, app.Paused ? Theme.Accent : Color.FromArgb(150, Theme.Accent), 1.2f, all, rad);
 
-            // poignée de déplacement
-            using (SolidBrush b = new SolidBrush(Theme.Faint))
-            {
-                for (int k = 0; k < 3; k++) for (int j = 0; j < 2; j++)
-                {
-                    float x, y;
-                    if (Vertical) { x = Width / 2f - Theme.S(8) + k * Theme.S(6); y = Theme.S(5) + j * Theme.S(4); }
-                    else { x = Theme.S(4) + j * Theme.S(4); y = Height / 2f - Theme.S(8) + k * Theme.S(6); }
-                    g.FillEllipse(b, x, y, Theme.S(2), Theme.S(2));
-                }
-            }
+            // poignée = petit blason
+            float gs = Theme.S(16);
+            RectangleF gr = Vertical
+                ? new RectangleF((Width - gs) / 2f, Theme.S(6), gs, gs)
+                : new RectangleF(Theme.S(8), (Height - gs) / 2f, gs, gs);
+            Brand.DrawShield(g, gr);
 
             if (items.Count == 0)
             {
@@ -155,42 +155,60 @@ namespace Relais
                 Rectangle r = TileRect(i);
                 bool active = w.Handle == fg;
                 bool flash = app.IsFlashing(w.Handle);
-                Color bg = active ? Theme.AccentDim : (i == hover ? Theme.Hover : Theme.Panel);
-                Theme.FillRound(g, bg, r, Theme.S(8));
-                if (active) Theme.StrokeRound(g, Theme.Accent, 1.5f, new RectangleF(r.X + 0.75f, r.Y + 0.75f, r.Width - 1.5f, r.Height - 1.5f), Theme.S(8));
-                if (flash && !active)
-                {
-                    // c'est son tour : la vignette pulse
-                    int pa = 90 + (int)(120 * (0.5 + 0.5 * Math.Sin(pulse * 0.6)));
-                    using (System.Drawing.Drawing2D.GraphicsPath gp = Theme.Round(r, Theme.S(8)))
-                    using (SolidBrush pb = new SolidBrush(Color.FromArgb(Math.Min(255, pa / 2), Theme.Accent))) g.FillPath(pb, gp);
-                    Theme.StrokeRound(g, Color.FromArgb(Math.Min(255, pa + 40), Theme.Accent), 2f, new RectangleF(r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2), Theme.S(8));
-                }
-
                 int av = Av;
                 RectangleF ar = Names
                     ? new RectangleF(r.X + Theme.S(7), r.Y + (r.Height - av) / 2f, av, av)
                     : new RectangleF(r.X + (r.Width - av) / 2f, r.Y + (r.Height - av) / 2f, av, av);
+
+                if (i == hover)
+                    Theme.FillRound(g, Color.FromArgb(Theme.IsLight ? 110 : 90, Theme.Hover), r, r.Height / 2f);
+
+                // tour en attente : anneau qui « respire »
+                if (flash && !active)
+                {
+                    float k = (float)(0.5 + 0.5 * Math.Sin(pulse * 0.55));
+                    float grow = Theme.S(3) + k * Theme.S(4);
+                    using (Pen pp = new Pen(Color.FromArgb((int)(220 - 150 * k), Theme.Accent), Theme.S(2)))
+                        g.DrawEllipse(pp, ar.X - grow, ar.Y - grow, ar.Width + 2 * grow, ar.Height + 2 * grow);
+                }
+
+                // anneau : doré si actif
+                float ring = Theme.S(active ? 3 : 2);
+                RectangleF rr = new RectangleF(ar.X - ring / 2f - 1, ar.Y - ring / 2f - 1, ar.Width + ring + 2, ar.Height + ring + 2);
+                if (active)
+                    using (System.Drawing.Drawing2D.LinearGradientBrush gb = new System.Drawing.Drawing2D.LinearGradientBrush(rr, ControlPaint.Light(Theme.Accent, 0.5f), ControlPaint.Dark(Theme.Accent, 0.2f), 60f))
+                    using (Pen rp = new Pen(gb, ring)) g.DrawEllipse(rp, rr);
+                else
+                    using (Pen rp = new Pen(Color.FromArgb(180, Theme.Border), ring)) g.DrawEllipse(rp, rr);
+
                 Theme.Avatar(g, ar, w.Name, w.Class, app.Paused);
 
-                // numéro d'ordre
-                Rectangle nr = new Rectangle((int)ar.Right - Theme.S(10), (int)ar.Bottom - Theme.S(12), Theme.S(14), Theme.S(14));
-                Theme.FillRound(g, Theme.Bg, nr, Theme.S(7));
-                Theme.DrawText(g, (i + 1).ToString(), Theme.F(6.5f, FontStyle.Bold), active ? Theme.Accent : Theme.Muted, nr,
+                // pièce d'or : numéro d'ordre
+                float cs = Theme.S(15);
+                RectangleF coin = new RectangleF(ar.Right - cs + Theme.S(3), ar.Bottom - cs + Theme.S(3), cs, cs);
+                using (System.Drawing.Drawing2D.LinearGradientBrush cb = new System.Drawing.Drawing2D.LinearGradientBrush(coin, ControlPaint.Light(Theme.Accent, 0.45f), ControlPaint.Dark(Theme.Accent, 0.15f), 90f))
+                    g.FillEllipse(cb, coin);
+                using (Pen cp2 = new Pen(Theme.Sidebar, 1.2f)) g.DrawEllipse(cp2, coin);
+                Theme.DrawText(g, (i + 1).ToString(), Theme.F(6.5f, FontStyle.Bold), Theme.OnAccent, Rectangle.Round(coin),
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
 
                 if (Names)
                 {
-                    Rectangle tr = new Rectangle((int)ar.Right + Theme.S(7), r.Y, r.Right - (int)ar.Right - Theme.S(10), r.Height);
-                    Theme.DrawText(g, w.Name, active ? Theme.SmallBold : Theme.Small, active ? Theme.Text : Theme.Muted, tr,
-                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                    Rectangle tr = new Rectangle((int)ar.Right + Theme.S(9), r.Y, r.Right - (int)ar.Right - Theme.S(12), r.Height);
+                    Rectangle t1 = new Rectangle(tr.X, tr.Y + tr.Height / 2 - Theme.S(16), tr.Width, Theme.S(18));
+                    Rectangle t2 = new Rectangle(tr.X, tr.Y + tr.Height / 2 + Theme.S(1), tr.Width, Theme.S(15));
+                    Theme.DrawText(g, w.Name, active ? Theme.SmallBold : Theme.Small, active ? Theme.Text : Theme.Muted, t1,
+                        TextFormatFlags.Left | TextFormatFlags.Bottom | TextFormatFlags.EndEllipsis);
+                    string sub = flash && !active ? "à toi !" : (w.Class.Length > 0 ? w.Class : "");
+                    Theme.DrawText(g, sub, Theme.F(7f, FontStyle.Regular), flash && !active ? Theme.Accent : Theme.Faint, t2,
+                        TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.EndEllipsis);
                 }
             }
 
             if (app.Paused)
             {
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(160, Theme.Bg))) g.FillRectangle(b, TileRect(0).X, 0, Width, Height);
-                Theme.DrawText(g, "PAUSE", Theme.SmallBold, Theme.Accent, ClientRectangle, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                using (SolidBrush b2 = new SolidBrush(Color.FromArgb(170, Theme.Sidebar))) g.FillRectangle(b2, TileRect(0).X, 0, Width, Height);
+                Theme.DrawText(g, "EN PAUSE", Theme.Serif(9f, FontStyle.Bold), Theme.Accent, ClientRectangle, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
         }
 
@@ -277,7 +295,18 @@ namespace Relais
                 app.S.Save();
                 return;
             }
-            if (e.Button == MouseButtons.Right) { ShowMenu(e.Location); return; }
+            if (e.Button == MouseButtons.Right)
+            {
+                int ti = TileAt(e.Location);
+                if (ti >= 0)
+                {
+                    Rectangle tr = TileRect(ti);
+                    app.Hover.HidePreview();
+                    RadialMenu.Open(app, items[ti], PointToScreen(new Point(tr.X + Theme.S(7) + Av / 2, tr.Y + tr.Height / 2)));
+                }
+                else ShowMenu(e.Location);
+                return;
+            }
             if (e.Button == MouseButtons.Left)
             {
                 int i = TileAt(e.Location);
@@ -374,6 +403,140 @@ namespace Relais
                 g.FillEllipse(b, Theme.S(16), Height / 2f - Theme.S(4), Theme.S(8), Theme.S(8));
             Theme.DrawText(g, text, Theme.Bold, Theme.Text, new Rectangle(Theme.S(32), 0, Width - Theme.S(40), Height),
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        }
+    }
+
+    /// <summary>Menu radial (clic droit sur un perso de la mini-barre) : aller, fiche, son, invitation.</summary>
+    public sealed class RadialMenu : Form
+    {
+        static RadialMenu current;
+        readonly App app;
+        readonly GameWindow win;
+        readonly string[] labels;
+        int hover = -1;
+        bool entered;
+        readonly Timer watch = new Timer();
+        float grow;
+
+        public static void Open(App app, GameWindow w, Point center)
+        {
+            if (current != null && !current.IsDisposed) current.Close();
+            current = new RadialMenu(app, w, center);
+            current.Show();
+        }
+
+        RadialMenu(App app, GameWindow w, Point center)
+        {
+            this.app = app;
+            win = w;
+            bool muted = app.VolumeOf(w.Name) == 0;
+            labels = new string[] { "Aller", "Fiche", muted ? "Son" : "Muet", "Inviter" };
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            TopMost = true;
+            StartPosition = FormStartPosition.Manual;
+            BackColor = Color.FromArgb(1, 2, 3);
+            TransparencyKey = BackColor;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
+            int size = Theme.S(190);
+            Bounds = new Rectangle(center.X - size / 2, center.Y - size / 2, size, size);
+            watch.Interval = 30;
+            int life = 0;
+            watch.Tick += delegate
+            {
+                life++;
+                if (grow < 1f) { grow = Math.Min(1f, grow + 0.2f); Invalidate(); }
+                bool inside = Bounds.Contains(Cursor.Position);
+                if (inside) entered = true;
+                if ((entered && !inside) || (!entered && life > 120)) Close();
+            };
+            watch.Start();
+        }
+
+        protected override bool ShowWithoutActivation { get { return true; } }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= Native.WS_EX_NOACTIVATE | Native.WS_EX_TOOLWINDOW | Native.WS_EX_TOPMOST;
+                return cp;
+            }
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == Native.WM_MOUSEACTIVATE) { m.Result = (IntPtr)Native.MA_NOACTIVATE; return; }
+            base.WndProc(ref m);
+        }
+
+        RectangleF Item(int i)
+        {
+            float c = Width / 2f, d = Theme.S(54), r = Theme.S(62) * (0.55f + 0.45f * grow);
+            double a = -Math.PI / 2 + i * Math.PI / 2;
+            return new RectangleF(c + (float)Math.Cos(a) * r - d / 2, c + (float)Math.Sin(a) * r - d / 2, d, d);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.Clear(BackColor);
+            Theme.Hq(g);
+            float c = Width / 2f, av = Theme.S(46);
+            // disque central
+            using (SolidBrush bb = new SolidBrush(Theme.Sidebar)) g.FillEllipse(bb, c - av / 2 - 4, c - av / 2 - 4, av + 8, av + 8);
+            using (Pen gp = new Pen(Theme.Accent, 2f)) g.DrawEllipse(gp, c - av / 2 - 4, c - av / 2 - 4, av + 8, av + 8);
+            Theme.Avatar(g, new RectangleF(c - av / 2, c - av / 2, av, av), win.Name, win.Class, false);
+            for (int i = 0; i < labels.Length; i++)
+            {
+                RectangleF r = Item(i);
+                bool h = i == hover;
+                using (System.Drawing.Drawing2D.LinearGradientBrush lb = new System.Drawing.Drawing2D.LinearGradientBrush(r,
+                    h ? ControlPaint.Light(Theme.Accent, 0.3f) : Theme.Panel2, h ? Theme.Accent : Theme.Sidebar, 90f))
+                    g.FillEllipse(lb, r);
+                using (Pen p = new Pen(h ? ControlPaint.Light(Theme.Accent, 0.4f) : Color.FromArgb(170, Theme.Accent), 1.5f)) g.DrawEllipse(p, r);
+                Theme.DrawText(g, labels[i], Theme.SmallBold, h ? Theme.OnAccent : Theme.Text, Rectangle.Round(r),
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            }
+        }
+
+        int ItemAt(Point p)
+        {
+            for (int i = 0; i < labels.Length; i++)
+            {
+                RectangleF r = Item(i);
+                float dx = p.X - (r.X + r.Width / 2), dy = p.Y - (r.Y + r.Height / 2);
+                if (dx * dx + dy * dy <= r.Width * r.Width / 4) return i;
+            }
+            return -1;
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            int h = ItemAt(e.Location);
+            if (h != hover) { hover = h; Cursor = h >= 0 ? Cursors.Hand : Cursors.Default; Invalidate(); }
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            int i = ItemAt(e.Location);
+            if (i < 0) { Close(); return; }
+            string n = win.Name;
+            Close();
+            if (i == 0) app.Activate(n);
+            else if (i == 1) { app.ShowMain(); app.OpenSheet(n); }
+            else if (i == 2) app.SetVolume(n, app.VolumeOf(n) == 0 ? 100 : 0);
+            else app.CopyInvite(n);
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            watch.Stop();
+            if (current == this) current = null;
+            base.OnFormClosed(e);
         }
     }
 }

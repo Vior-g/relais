@@ -124,16 +124,16 @@ namespace Relais
             int y = (corner == 2 || corner == 3) ? Height - h - m : m;
             Rectangle pill = new Rectangle(x, y, w, h);
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
-            using (SolidBrush b = new SolidBrush(Color.FromArgb(24, 26, 31))) g.FillRectangle(b, pill);
+            using (SolidBrush b = new SolidBrush(Theme.Sidebar)) g.FillRectangle(b, pill);
             using (Pen p = new Pen(Flashing ? Theme.Accent : (Active ? c : Theme.Border))) g.DrawRectangle(p, pill.X, pill.Y, pill.Width - 1, pill.Height - 1);
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             Theme.Avatar(g, new RectangleF(x + Theme.S(8), y + (sub.Length > 0 ? Theme.S(4) : (h - av) / 2f), av, av), Name2, Class2, false);
             int tx = x + Theme.S(8) + av + Theme.S(6);
             TextRenderer.DrawText(g, label, f, new Rectangle(tx, y + (sub.Length > 0 ? Theme.S(4) : 0), w, sub.Length > 0 ? Theme.S(18) : h),
-                Flashing ? Theme.Accent : Color.FromArgb(232, 234, 237), Color.FromArgb(24, 26, 31), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                Flashing ? Theme.Accent : Theme.Text, Theme.Sidebar, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
             if (sub.Length > 0)
                 TextRenderer.DrawText(g, sub, Theme.Small, new Rectangle(x + Theme.S(8), y + Theme.S(22), w, Theme.S(16)),
-                    Color.FromArgb(150, 157, 170), Color.FromArgb(24, 26, 31), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                    Theme.Muted, Theme.Sidebar, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
         }
     }
 

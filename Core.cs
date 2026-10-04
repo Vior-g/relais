@@ -258,12 +258,38 @@ namespace Relais
         {
             kbProc = KeyboardProc;
             msProc = MouseProc;
-            IntPtr mod = Native.GetModuleHandle(null);
-            kbHook = Native.SetWindowsHookEx(Native.WH_KEYBOARD_LL, kbProc, mod, 0);
-            msHook = Native.SetWindowsHookEx(Native.WH_MOUSE_LL, msProc, mod, 0);
+            kbHook = Install(Native.WH_KEYBOARD_LL, kbProc, out KbError);
+            msHook = Install(Native.WH_MOUSE_LL, msProc, out MsError);
         }
 
-        public bool Installed { get { return kbHook != IntPtr.Zero && msHook != IntPtr.Zero; } }
+        public int KbError, MsError;
+
+        /// <summary>Essaie plusieurs « modules » : certains PC refusent l'un mais acceptent l'autre.</summary>
+        static IntPtr Install(int type, Native.LowLevelProc proc, out int error)
+        {
+            IntPtr[] mods = { Native.GetModuleHandle(null), Native.GetModuleHandle("user32.dll"), IntPtr.Zero };
+            error = 0;
+            foreach (IntPtr m in mods)
+            {
+                IntPtr h = Native.SetWindowsHookEx(type, proc, m, 0);
+                if (h != IntPtr.Zero) { error = 0; return h; }
+                error = Marshal.GetLastWin32Error();
+            }
+            return IntPtr.Zero;
+        }
+
+        public string Status
+        {
+            get
+            {
+                return "clavier " + (kbHook != IntPtr.Zero ? "OK" : "échec (code " + KbError + ")")
+                    + ", souris " + (msHook != IntPtr.Zero ? "OK" : "échec (code " + MsError + ")");
+            }
+        }
+
+        /// <summary>Clavier écouté (l'essentiel). La souris peut échouer seule : voir MouseOk.</summary>
+        public bool Installed { get { return kbHook != IntPtr.Zero; } }
+        public bool MouseOk { get { return msHook != IntPtr.Zero; } }
 
         static int CurrentMods()
         {

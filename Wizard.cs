@@ -19,6 +19,7 @@ namespace Relais
         {
             this.app = app;
             Text = "Bienvenue dans Relais 2.0";
+            Chrome.Hook(this);
             Icon = app.AppIcon;
             BackColor = Theme.Bg; ForeColor = Theme.Text; Font = Theme.Normal;
             FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false;
@@ -152,6 +153,7 @@ namespace Relais
         {
             this.shot = shot;
             Text = "Avatar de " + name + " — encadre la tête de ton perso";
+            Chrome.Hook(this);
             BackColor = Theme.Bg; ForeColor = Theme.Text; Font = Theme.Normal;
             StartPosition = FormStartPosition.CenterScreen;
             DoubleBuffered = true;
