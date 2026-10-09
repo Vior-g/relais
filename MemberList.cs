@@ -69,7 +69,7 @@ namespace Relais
 
             if (ms.Count == 0)
             {
-                Theme.DrawText(g, "Aucun perso dans ce profil.\nConnecte tes comptes Dofus : ils seront ajoutés automatiquement.",
+                Theme.DrawText(g, L.T("Aucun perso dans ce profil.\nConnecte tes comptes Dofus : ils seront ajoutés automatiquement."),
                     Theme.Normal, Theme.Muted, ClientRectangle, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
                 return;
             }
@@ -112,13 +112,13 @@ namespace Relais
                 int tw = KeyRect(r).X - tx - Theme.S(8);
                 Theme.DrawText(g, m.Name, Theme.Bold, dim ? Theme.Faint : Theme.Text,
                     new Rectangle(tx, r.Y + Theme.S(8), tw, Theme.S(20)), TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
-                string sub = online ? ((w.Class.Length > 0 ? w.Class + " · " : "") + (active ? "au premier plan" : "connecté")) : "hors ligne";
-                if (!m.Enabled) sub = "désactivé · " + sub;
+                string sub = online ? ((w.Class.Length > 0 ? w.Class + " · " : "") + (active ? L.T("au premier plan") : L.T("connecté"))) : L.T("hors ligne");
+                if (!m.Enabled) sub = L.T("désactivé · ") + sub;
                 int vol = app.VolumeOf(m.Name);
-                if (vol < 100) sub += " · son " + vol + " %";
-                if (app.NoteOf(m.Name) != null) sub += " · note";
+                if (vol < 100) sub += L.T(" · son ") + vol + " %";
+                if (app.NoteOf(m.Name) != null) sub += L.T(" · note");
                 CharSheet sh;
-                if (app.S.Sheets.TryGetValue(m.Name, out sh) && sh != null && sh.Level > 0) sub = "niv. " + sh.Level + " · " + sub;
+                if (app.S.Sheets.TryGetValue(m.Name, out sh) && sh != null && sh.Level > 0) sub = L.T("niv. ") + sh.Level + " · " + sub;
                 using (SolidBrush dot = new SolidBrush(online ? Theme.Green : Theme.Faint))
                     g.FillEllipse(dot, tx, r.Y + Theme.S(34), Theme.S(7), Theme.S(7));
                 Theme.DrawText(g, sub, Theme.Small, Theme.Muted,
@@ -130,7 +130,7 @@ namespace Relais
                 Theme.FillRound(g, cap ? Theme.AccentDim : Theme.Panel2, kr, Theme.S(6));
                 if (cap) Theme.StrokeRound(g, Theme.Accent, 1.2f, kr, Theme.S(6));
                 Hotkey hk = Hotkey.Parse(m.Hotkey);
-                string kt = cap ? "Appuie sur une touche…" : (hk == null ? "+ raccourci" : hk.Display());
+                string kt = cap ? L.T("Appuie sur une touche…") : (hk == null ? L.T("+ raccourci") : hk.Display());
                 Theme.DrawText(g, kt, cap || hk == null ? Theme.Small : Theme.SmallBold, cap ? Theme.Accent : (hk == null ? Theme.Faint : Theme.Text),
                     kr, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
@@ -175,7 +175,7 @@ namespace Relais
                 hover = h; Invalidate();
             }
             Cursor = h >= 0 ? Cursors.Hand : Cursors.Default;
-            string want = h < 0 ? "" : AvatarRect(RowRect(h)).Contains(e.Location) ? "Clic : fiche du perso, image, couleur" : (app.NoteOf(Members[h].Name) ?? "");
+            string want = h < 0 ? "" : AvatarRect(RowRect(h)).Contains(e.Location) ? L.T("Clic : fiche du perso, image, couleur") : (app.NoteOf(Members[h].Name) ?? "");
             if (tip.GetToolTip(this) != want) tip.SetToolTip(this, want);
         }
 
@@ -228,11 +228,11 @@ namespace Relais
         void AvatarMenu(string name, Point pt)
         {
             ContextMenuStrip cm = new ContextMenuStrip();
-            cm.Items.Add("Fiche du perso…", null, delegate { app.OpenSheet(name); });
+            cm.Items.Add(L.T("Fiche du perso…"), null, delegate { app.OpenSheet(name); });
             cm.Items.Add(new ToolStripSeparator());
-            cm.Items.Add("Capturer l'avatar depuis le jeu…", null, delegate { app.CaptureAvatar(name); }).Enabled = app.WindowOf(name) != null;
-            cm.Items.Add("Choisir une image…", null, delegate { PickImage(name); });
-            cm.Items.Add("Choisir une couleur…", null, delegate
+            cm.Items.Add(L.T("Capturer l'avatar depuis le jeu…"), null, delegate { app.CaptureAvatar(name); }).Enabled = app.WindowOf(name) != null;
+            cm.Items.Add(L.T("Choisir une image…"), null, delegate { PickImage(name); });
+            cm.Items.Add(L.T("Choisir une couleur…"), null, delegate
             {
                 using (ColorDialog cd = new ColorDialog())
                 {
@@ -241,7 +241,7 @@ namespace Relais
                     if (cd.ShowDialog(FindForm()) == DialogResult.OK) app.SetCharColor(name, cd.Color);
                 }
             });
-            cm.Items.Add("Réinitialiser l'apparence", null, delegate { app.SetCharColor(name, null); app.SetCharImage(name, null); });
+            cm.Items.Add(L.T("Réinitialiser l'apparence"), null, delegate { app.SetCharColor(name, null); app.SetCharImage(name, null); });
             cm.Show(this, pt);
         }
 
@@ -274,7 +274,7 @@ namespace Relais
             string owner = app.Owner(proxy.Value, m);
             if (owner != null)
             {
-                MessageBox.Show(FindForm(), "Ce raccourci est déjà utilisé par « " + owner + " ».", "Relais", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(FindForm(), L.T("Ce raccourci est déjà utilisé par « ") + owner + " ».", "Relais", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 Invalidate();
                 return;
             }
@@ -286,31 +286,31 @@ namespace Relais
         {
             Member m = Members[i];
             ContextMenuStrip cm = new ContextMenuStrip();
-            cm.Items.Add("Aller sur ce perso", null, delegate { app.Activate(m.Name); }).Enabled = app.WindowOf(m.Name) != null;
-            cm.Items.Add("Définir le raccourci…", null, delegate { StartCapture(i); });
-            cm.Items.Add("Effacer le raccourci", null, delegate { m.Hotkey = null; app.ProfileEdited(); }).Enabled = m.Hotkey != null;
-            cm.Items.Add("Copier /invite " + m.Name, null, delegate { app.CopyInvite(m.Name); });
+            cm.Items.Add(L.T("Aller sur ce perso"), null, delegate { app.Activate(m.Name); }).Enabled = app.WindowOf(m.Name) != null;
+            cm.Items.Add(L.T("Définir le raccourci…"), null, delegate { StartCapture(i); });
+            cm.Items.Add(L.T("Effacer le raccourci"), null, delegate { m.Hotkey = null; app.ProfileEdited(); }).Enabled = m.Hotkey != null;
+            cm.Items.Add(L.T("Copier /invite ") + m.Name, null, delegate { app.CopyInvite(m.Name); });
             cm.Items.Add(new ToolStripSeparator());
-            cm.Items.Add(app.NoteOf(m.Name) == null ? "Ajouter une note…" : "Modifier la note…", null, delegate
+            cm.Items.Add(app.NoteOf(m.Name) == null ? L.T("Ajouter une note…") : L.T("Modifier la note…"), null, delegate
             {
-                string n = Prompt.AskMultiline(FindForm(), "Note — " + m.Name, "Quêtes en cours, objectifs, stuff à acheter…", app.NoteOf(m.Name));
+                string n = Prompt.AskMultiline(FindForm(), L.T("Note — ") + m.Name, L.T("Quêtes en cours, objectifs, stuff à acheter…"), app.NoteOf(m.Name));
                 if (n != null) app.SetNote(m.Name, n);
             });
-            ToolStripMenuItem vol = new ToolStripMenuItem("Volume du son");
+            ToolStripMenuItem vol = new ToolStripMenuItem(L.T("Volume du son"));
             int cur = app.VolumeOf(m.Name);
             foreach (int v in new int[] { 100, 75, 50, 25, 10, 0 })
             {
                 int val = v;
-                ToolStripMenuItem it = new ToolStripMenuItem(v == 0 ? "Muet" : v + " %", null, delegate { app.SetVolume(m.Name, val); });
+                ToolStripMenuItem it = new ToolStripMenuItem(v == 0 ? L.T("Muet") : v + " %", null, delegate { app.SetVolume(m.Name, val); });
                 it.Checked = cur == v;
                 vol.DropDownItems.Add(it);
             }
             cm.Items.Add(vol);
-            cm.Items.Add("Fiche du perso…", null, delegate { app.OpenSheet(m.Name); });
-            ToolStripMenuItem look = new ToolStripMenuItem("Apparence");
-            look.DropDownItems.Add("Capturer depuis le jeu…", null, delegate { app.CaptureAvatar(m.Name); }).Enabled = app.WindowOf(m.Name) != null;
-            look.DropDownItems.Add("Choisir une image…", null, delegate { PickImage(m.Name); });
-            look.DropDownItems.Add("Choisir une couleur…", null, delegate
+            cm.Items.Add(L.T("Fiche du perso…"), null, delegate { app.OpenSheet(m.Name); });
+            ToolStripMenuItem look = new ToolStripMenuItem(L.T("Apparence"));
+            look.DropDownItems.Add(L.T("Capturer depuis le jeu…"), null, delegate { app.CaptureAvatar(m.Name); }).Enabled = app.WindowOf(m.Name) != null;
+            look.DropDownItems.Add(L.T("Choisir une image…"), null, delegate { PickImage(m.Name); });
+            look.DropDownItems.Add(L.T("Choisir une couleur…"), null, delegate
             {
                 using (ColorDialog cd = new ColorDialog())
                 {
@@ -319,14 +319,14 @@ namespace Relais
                     if (cd.ShowDialog(FindForm()) == DialogResult.OK) app.SetCharColor(m.Name, cd.Color);
                 }
             });
-            look.DropDownItems.Add("Réinitialiser l'apparence", null, delegate { app.SetCharColor(m.Name, null); app.SetCharImage(m.Name, null); });
+            look.DropDownItems.Add(L.T("Réinitialiser l'apparence"), null, delegate { app.SetCharColor(m.Name, null); app.SetCharImage(m.Name, null); });
             cm.Items.Add(look);
             cm.Items.Add(new ToolStripSeparator());
-            cm.Items.Add("Monter", null, delegate { MoveRow(i, -1); }).Enabled = i > 0;
-            cm.Items.Add("Descendre", null, delegate { MoveRow(i, +1); }).Enabled = i < Members.Count - 1;
-            cm.Items.Add("Mettre en chef de team (1er)", null, delegate { Members.RemoveAt(i); Members.Insert(0, m); app.ProfileEdited(); }).Enabled = i > 0;
+            cm.Items.Add(L.T("Monter"), null, delegate { MoveRow(i, -1); }).Enabled = i > 0;
+            cm.Items.Add(L.T("Descendre"), null, delegate { MoveRow(i, +1); }).Enabled = i < Members.Count - 1;
+            cm.Items.Add(L.T("Mettre en chef de team (1er)"), null, delegate { Members.RemoveAt(i); Members.Insert(0, m); app.ProfileEdited(); }).Enabled = i > 0;
             cm.Items.Add(new ToolStripSeparator());
-            cm.Items.Add("Retirer du profil", null, delegate { Members.RemoveAt(i); app.ProfileEdited(); });
+            cm.Items.Add(L.T("Retirer du profil"), null, delegate { Members.RemoveAt(i); app.ProfileEdited(); });
             cm.Show(this, pt);
         }
 
@@ -334,11 +334,11 @@ namespace Relais
         {
             using (OpenFileDialog d = new OpenFileDialog())
             {
-                d.Title = "Image pour " + name + " (une capture de ton perso, par exemple)";
-                d.Filter = "Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif|Tous les fichiers|*.*";
+                d.Title = L.T("Image pour ") + name + L.T(" (une capture de ton perso, par exemple)");
+                d.Filter = L.T("Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif|Tous les fichiers|*.*");
                 if (d.ShowDialog(FindForm()) != DialogResult.OK) return;
                 try { app.SetCharImage(name, d.FileName); }
-                catch (Exception ex) { MessageBox.Show(FindForm(), "Image illisible : " + ex.Message, "Relais"); }
+                catch (Exception ex) { MessageBox.Show(FindForm(), L.T("Image illisible : ") + ex.Message, "Relais"); }
             }
         }
 

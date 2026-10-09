@@ -29,6 +29,63 @@ namespace Relais
         readonly ToolStripMenuItem trayPause, trayProfiles;
         public Toast Toast;
         public OverlayManager Overlays;
+        public CombatTracker Combat;
+        public SynchronizationContext Ui { get { return ui; } }
+        public PhoneServer Phone;
+        /// <summary>Vrai après une restauration cloud : la config sur disque ne doit pas être écrasée.</summary>
+        public bool SkipSaveOnExit;
+        bool syncDirty = true;
+        DateTime lastAutoSync = DateTime.Now;
+
+        public void SetPhone(bool on)
+        {
+            S.PhoneRemote = on; S.Save();
+            if (Phone == null) Phone = new PhoneServer(this);
+            if (on) Phone.Start(); else Phone.Stop();
+            if (on && Phone.Error != null) Toast.ShowMessage(L.T("Télécommande : ") + Phone.Error, true, 6);
+        }
+
+        public void CloudUpload(Action<string, bool> done)
+        {
+            string payload = CloudSync.Payload(S);
+            CloudSync.Run(ui, delegate { return CloudSync.Upload(S, payload); }, delegate (string msg, bool ok)
+            {
+                if (ok) { S.Save(); syncDirty = false; Record("info", L.T("Sauvegarde cloud envoyée")); }
+                if (done != null) done(msg, ok);
+            });
+        }
+
+        public void CloudDownload(Action<string, bool> done)
+        {
+            CloudSync.Run(ui, delegate { return CloudSync.Download(S); }, delegate (string msg, bool ok)
+            {
+                if (ok) SkipSaveOnExit = true;
+                if (done != null) done(msg, ok);
+            });
+        }
+
+        /// <summary>Envoi automatique toutes les 30 min si quelque chose a changé.</summary>
+        void AutoSyncTick()
+        {
+            if (!S.AutoSync || string.IsNullOrEmpty(S.GistToken) || !syncDirty) return;
+            if ((DateTime.Now - lastAutoSync).TotalMinutes < 30) return;
+            lastAutoSync = DateTime.Now;
+            CloudUpload(null);
+        }
+
+        /// <summary>Journal des derniers événements (affiché sur l'accueil).</summary>
+        public sealed class LogEvent { public DateTime At; public string Text; public string Kind; }
+        public readonly List<LogEvent> Events = new List<LogEvent>();
+        public event EventHandler EventsChanged;
+
+        public void Record(string kind, string text)
+        {
+            LogEvent e = new LogEvent();
+            e.At = DateTime.Now; e.Text = text; e.Kind = kind;
+            Events.Insert(0, e);
+            if (Events.Count > 40) Events.RemoveAt(Events.Count - 1);
+            if (EventsChanged != null) EventsChanged(this, EventArgs.Empty);
+        }
         public HoverPreview Hover;
         PreviewForm previewWall;
         readonly Dictionary<IntPtr, DateTime> flashing = new Dictionary<IntPtr, DateTime>();
@@ -46,6 +103,7 @@ namespace Relais
         public App()
         {
             S = Settings.Load();
+            L.En = S.Language == "en";
             S.GetCurrent();
             PruneStats();
             Theme.ApplyBase(S.LightTheme);
@@ -55,6 +113,11 @@ namespace Relais
             AppIcon = Theme.MakeIcon(Theme.S(32));
 
             Toast = new Toast();
+            Combat = new CombatTracker(this);
+            System.Windows.Forms.Timer ct = new System.Windows.Forms.Timer();
+            ct.Interval = 1000;
+            ct.Tick += delegate { Combat.Tick(); AutoSyncTick(); };
+            ct.Start();
 
             // Formulaire caché pour obtenir un contexte de synchronisation UI
             Main = new MainForm(this);
@@ -72,23 +135,24 @@ namespace Relais
 
             // Icône de notification
             ContextMenuStrip menu = new ContextMenuStrip();
-            menu.Items.Add("Ouvrir Relais", null, delegate { ShowMain(); });
-            trayPause = new ToolStripMenuItem("Mettre en pause", null, delegate { TogglePause(); });
+            menu.Items.Add(L.T("Ouvrir Relais"), null, delegate { ShowMain(); });
+            trayPause = new ToolStripMenuItem(L.T("Mettre en pause"), null, delegate { TogglePause(); });
             menu.Items.Add(trayPause);
-            trayProfiles = new ToolStripMenuItem("Profil");
+            trayProfiles = new ToolStripMenuItem(L.T("Profil"));
             menu.Items.Add(trayProfiles);
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Aperçus en direct", null, delegate { TogglePreviewWall(); });
-            menu.Items.Add("Superposer les fenêtres", null, delegate { StackWindows(); });
-            menu.Items.Add("Fenêtres en mosaïque", null, delegate { MosaicWindows(); });
-            menu.Items.Add("Restaurer la disposition du profil", null, delegate { ApplyLayout(false); });
-            menu.Items.Add("Copier l'invitation suivante", null, delegate { InviteNext(); });
-            menu.Items.Add("Afficher / masquer la barre", null, delegate { ToggleBar(); });
+            menu.Items.Add(L.T("Palette de commandes…"), null, delegate { OpenPalette(); });
+            menu.Items.Add(L.T("Aperçus en direct"), null, delegate { TogglePreviewWall(); });
+            menu.Items.Add(L.T("Superposer les fenêtres"), null, delegate { StackWindows(); });
+            menu.Items.Add(L.T("Fenêtres en mosaïque"), null, delegate { MosaicWindows(); });
+            menu.Items.Add(L.T("Restaurer la disposition du profil"), null, delegate { ApplyLayout(false); });
+            menu.Items.Add(L.T("Copier l'invitation suivante"), null, delegate { InviteNext(); });
+            menu.Items.Add(L.T("Afficher / masquer la barre"), null, delegate { ToggleBar(); });
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Quitter", null, delegate { Quit(); });
+            menu.Items.Add(L.T("Quitter"), null, delegate { Quit(); });
             tray = new NotifyIcon();
             tray.Icon = AppIcon;
-            tray.Text = "Relais — organizer multicompte";
+            tray.Text = L.T("Relais — organizer multicompte");
             tray.ContextMenuStrip = menu;
             tray.Visible = true;
             tray.MouseClick += delegate (object s, MouseEventArgs e) { if (e.Button == MouseButtons.Left) ShowMain(); };
@@ -106,6 +170,8 @@ namespace Relais
             if (Autostart.Enabled) Autostart.Enabled = true; // met à jour le chemin si l'exe a été déplacé
             Hover = new HoverPreview();
             Overlays = new OverlayManager(this);
+            if (S.PhoneRemote) SetPhone(true);
+            Settings.Saved += delegate { syncDirty = true; };
             if (S.ShowBar) Bar.ShowBar();
             if (!S.StartMinimized && !Program.StartHidden) ShowMain();
             if (!S.OnboardingDone)
@@ -116,11 +182,137 @@ namespace Relais
                 ob.Start();
             }
             Updater.CheckInBackground(this, false);
+            if (S.OnboardingDone) ShowWhatsNewIfNeeded();
+            else S.LastSeenVersion = typeof(App).Assembly.GetName().Version.ToString(3);
+            Record("info", L.T("Relais démarré"));
         }
 
         // ---------------- v2 : tour, aperçus, aller-retour, profil auto, partage ----------------
 
         public IntPtr LastActive { get { return lastActiveDofus; } }
+
+        public void QuickTimer(int minutes)
+        {
+            TimerItem t = new TimerItem();
+            t.Name = L.T("Minuteur ") + Fmt.Duration(minutes * 60);
+            t.Minutes = minutes;
+            t.EndUtc = DateTime.UtcNow.AddMinutes(minutes).Ticks;
+            S.Timers.Add(t);
+            TimersEdited();
+            Toast.ShowMessage(L.T("Minuteur lancé : ") + Fmt.Duration(minutes * 60), false);
+            Record("timer", L.T("Minuteur lancé (") + Fmt.Duration(minutes * 60) + ")");
+        }
+
+        static Cmd C(string group, int icon, string title, string sub, Action run)
+        {
+            Cmd c = new Cmd();
+            c.Group = group; c.Icon = icon; c.Title = title; c.Sub = sub; c.Run = run;
+            return c;
+        }
+
+        /// <summary>Toutes les commandes proposées par la palette (Ctrl+K).</summary>
+        public List<Cmd> BuildCommands()
+        {
+            List<Cmd> l = new List<Cmd>();
+            List<GameWindow> rot = Rotation();
+            // persos d'abord
+            foreach (GameWindow w in rot)
+            {
+                string n = w.Name;
+                Member m = S.GetCurrent().Find(n);
+                Hotkey hk = m == null ? null : Hotkey.Parse(m.Hotkey);
+                Cmd c = C(L.T("Perso"), -1, L.T("Aller sur ") + n, (w.Class.Length > 0 ? w.Class : L.T("Personnage")) + (hk != null ? " · " + hk.Display() : ""), delegate { Activate(n); });
+                c.Avatar = n; c.AvatarClass = w.Class; c.KeepFocus = true;
+                l.Add(c);
+            }
+            l.Add(C(L.T("Action"), 7, L.T("Superposer les fenêtres"), L.T("Toutes à la place de la fenêtre active"), delegate { StackWindows(); }));
+            l.Add(C(L.T("Action"), 7, L.T("Mosaïque"), L.T("Répartir les fenêtres en grille"), delegate { MosaicWindows(); }));
+            l.Add(C(L.T("Action"), 7, L.T("Aperçus en direct"), L.T("Tous tes comptes en miniature"), delegate { TogglePreviewWall(); }));
+            l.Add(C(L.T("Action"), 7, L.T("Inviter la team"), L.T("Copie le prochain « /invite »"), delegate { InviteNext(); }));
+            l.Add(C(L.T("Action"), 7, L.T("Restaurer la disposition"), L.T("Fenêtres du profil à leur place"), delegate { ApplyLayout(false); }));
+            l.Add(C(L.T("Action"), 7, L.T("Enregistrer la disposition"), L.T("Mémorise la place de chaque fenêtre"), delegate { SaveLayout(); }));
+            l.Add(C(L.T("Action"), 7, L.T("Chef de team"), L.T("Aller sur le perso n°1"), delegate { Leader(); }));
+            l[l.Count - 1].KeepFocus = true;
+            l.Add(C(L.T("Action"), 7, L.T("Perso d'avant"), L.T("Aller-retour entre les deux derniers persos"), delegate { LastChar(); }));
+            l[l.Count - 1].KeepFocus = true;
+            l.Add(C(L.T("Action"), 5, Paused ? L.T("Reprendre Relais") : L.T("Mettre Relais en pause"), L.T("Raccourcis suspendus pendant la pause"), delegate { TogglePause(); }));
+            l.Add(C(L.T("Action"), 5, S.ShowBar ? L.T("Masquer la mini-barre") : L.T("Afficher la mini-barre"), "", delegate { ToggleBar(); }));
+            foreach (Profile p in S.Profiles)
+            {
+                string pn = p.Name;
+                l.Add(C(L.T("Profil"), 0, L.T("Profil : ") + pn, p.Members.Count + L.T(" perso(s)") + (pn == S.GetCurrent().Name ? L.T(" · actuel") : ""), delegate { SwitchProfile(pn); }));
+            }
+            foreach (GameWindow w in rot)
+            {
+                string n = w.Name, cl = w.Class;
+                Cmd f = C(L.T("Perso"), -1, L.T("Fiche de ") + n, L.T("Niveau, objectifs, quotidien, donjons"), delegate { ShowMain(); OpenSheet(n); });
+                f.Avatar = n; f.AvatarClass = cl; f.KeepFocus = true; l.Add(f);
+                Cmd inv = C(L.T("Perso"), -1, L.T("Copier /invite ") + n, L.T("Pour l'inviter dans le groupe"), delegate { CopyInvite(n); });
+                inv.Avatar = n; inv.AvatarClass = cl; l.Add(inv);
+                Cmd mu = C(L.T("Perso"), -1, (VolumeOf(n) == 0 ? L.T("Remettre le son de ") : L.T("Couper le son de ")) + n, L.T("Volume de la fenêtre"), delegate { SetVolume(n, VolumeOf(n) == 0 ? 100 : 0); });
+                mu.Avatar = n; mu.AvatarClass = cl; l.Add(mu);
+            }
+            foreach (TimerItem t in S.Timers)
+            {
+                TimerItem tt = t;
+                l.Add(C(L.T("Minuteur"), 2, (t.EndUtc > 0 ? L.T("Relancer : ") : L.T("Lancer : ")) + t.Name, Fmt.Duration(t.Minutes * 60), delegate
+                {
+                    tt.EndUtc = DateTime.UtcNow.AddMinutes(tt.Minutes).Ticks; TimersEdited();
+                    Toast.ShowMessage(L.T("Minuteur lancé : ") + tt.Name, false);
+                }));
+            }
+            string[] pages = { L.T("Accueil"), "Team", L.T("Raccourcis"), L.T("Minuteurs"), "Craft", "Stats", "Options" };
+            int[] icons = { 6, 0, 1, 2, 3, 4, 5 };
+            for (int i = 0; i < pages.Length; i++)
+            {
+                int pi = i;
+                Cmd c = C(L.T("Page"), icons[i], L.T("Ouvrir : ") + pages[i], L.T("Fenêtre de Relais"), delegate { ShowMain(); Main.GoTo(pi); });
+                c.KeepFocus = true; l.Add(c);
+            }
+            l.Add(C(L.T("Réglage"), 5, (S.AutoSwitchOnTurn ? L.T("Désactiver") : L.T("Activer")) + L.T(" : aller au perso dont c'est le tour"), "", delegate { S.AutoSwitchOnTurn = !S.AutoSwitchOnTurn; S.Save(); NotifyProfileChanged(); Toast.ShowMessage(L.T("Tour auto ") + (S.AutoSwitchOnTurn ? L.T("activé") : L.T("désactivé")), false); }));
+            l.Add(C(L.T("Réglage"), 5, (S.OverlayEnabled ? L.T("Désactiver") : L.T("Activer")) + L.T(" : vignettes en jeu"), "", delegate { S.OverlayEnabled = !S.OverlayEnabled; S.Save(); Overlays.Sync(); NotifyProfileChanged(); }));
+            l.Add(C(L.T("Réglage"), 5, (S.SoundsEnabled ? L.T("Couper") : L.T("Activer")) + L.T(" : sons de Relais"), "", delegate { S.SoundsEnabled = !S.SoundsEnabled; S.Save(); NotifyProfileChanged(); Toast.ShowMessage(L.T("Sons ") + (S.SoundsEnabled ? L.T("activés") : L.T("coupés")), false); }));
+            l.Add(C(L.T("Réglage"), 5, (S.AudioMuteBackground ? L.T("Désactiver") : L.T("Activer")) + L.T(" : son seulement sur la fenêtre active"), "", delegate { S.AudioMuteBackground = !S.AudioMuteBackground; S.Save(); ApplyAudio(true); NotifyProfileChanged(); }));
+            Screen[] screens = Screen.AllScreens;
+            if (screens.Length > 1)
+                foreach (Screen sc in screens)
+                {
+                    Screen s2 = sc;
+                    l.Add(C(L.T("Action"), 7, L.T("Team sur l'") + ScreenLabel(sc).Substring(0, 1).ToLowerInvariant() + ScreenLabel(sc).Substring(1), L.T("Toutes les fenêtres en mosaïque sur cet écran"), delegate { TeamToScreen(s2); }));
+                }
+            if (Combat.Active) l.Add(C(L.T("Action"), 7, L.T("Terminer le combat"), L.T("Tour ") + Combat.Round + " · " + Combat.Short(), delegate { Combat.EndNow(); }));
+            l.Add(C(L.T("Outil"), 5, S.PhoneRemote ? L.T("Couper la télécommande") : L.T("Activer la télécommande"), L.T("Changer de perso depuis le téléphone"), delegate { SetPhone(!S.PhoneRemote); if (S.PhoneRemote && Phone.Error == null) Toast.ShowMessage(L.T("Télécommande : ") + Phone.Url, false, 6); }));
+            if (!string.IsNullOrEmpty(S.GistToken))
+                l.Add(C(L.T("Outil"), 5, L.T("Envoyer la sauvegarde en ligne"), "Gist GitHub" + (string.IsNullOrEmpty(S.LastSync) ? "" : L.T(" · dernière : ") + S.LastSync), delegate { CloudUpload(delegate (string m, bool ok) { Toast.ShowMessage(m, !ok, 3); }); }));
+            l.Add(C(L.T("Outil"), 5, L.T("Soutenir Relais"), L.T("Un don ou une étoile sur GitHub"), delegate { Links.OpenSupport(this); }));
+            l.Add(C(L.T("Outil"), 5, L.T("Vérifier les mises à jour"), L.T("Sur ton dépôt GitHub"), delegate { ShowMain(); Updater.CheckInBackground(this, true); }));
+            l[l.Count - 1].KeepFocus = true;
+            l.Add(C(L.T("Outil"), 5, L.T("Quoi de neuf ?"), L.T("Les nouveautés de cette version"), delegate { ShowMain(); using (WhatsNew w = new WhatsNew(this)) w.ShowDialog(Main); }));
+            l[l.Count - 1].KeepFocus = true;
+            l.Add(C(L.T("Outil"), 5, L.T("Quitter Relais"), "", delegate { Quit(); }));
+            l[l.Count - 1].KeepFocus = true;
+            return l;
+        }
+
+        public void OpenPalette()
+        {
+            CommandPalette.Open(this);
+        }
+
+        /// <summary>« Quoi de neuf » au premier lancement d'une nouvelle version.</summary>
+        void ShowWhatsNewIfNeeded()
+        {
+            string v = typeof(App).Assembly.GetName().Version.ToString(3);
+            if (S.LastSeenVersion == v) return;
+            bool first = string.IsNullOrEmpty(S.LastSeenVersion) && !S.OnboardingDone;
+            S.LastSeenVersion = v;
+            S.Save();
+            if (first) return; // l'assistant de démarrage s'en charge
+            System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
+            t.Interval = 900;
+            t.Tick += delegate { t.Stop(); t.Dispose(); ShowMain(); using (WhatsNew w = new WhatsNew(this)) w.ShowDialog(Main); };
+            t.Start();
+        }
         public int FlashingCount { get { return flashing.Count; } }
         public bool IsFlashing(IntPtr h) { return flashing.ContainsKey(h); }
 
@@ -148,7 +340,7 @@ namespace Relais
         {
             foreach (GameWindow w in Windows)
                 if (w.Handle == prevActiveDofus) { Activate(w.Name); return; }
-            Toast.ShowMessage("Pas encore de perso précédent", false);
+            Toast.ShowMessage(L.T("Pas encore de perso précédent"), false);
         }
 
         /// <summary>Choisit le profil qui contient tous les persos connectés (le plus petit qui convient).</summary>
@@ -189,7 +381,7 @@ namespace Relais
         public string ImportCode(string code)
         {
             code = (code ?? "").Trim();
-            if (!code.StartsWith("RELAIS2-")) throw new FormatException("Ce n'est pas un code Relais (il doit commencer par RELAIS2-).");
+            if (!code.StartsWith("RELAIS2-")) throw new FormatException(L.T("Ce n'est pas un code Relais (il doit commencer par RELAIS2-)."));
             byte[] raw = Convert.FromBase64String(code.Substring(8));
             string json;
             using (System.IO.MemoryStream ms = new System.IO.MemoryStream(raw))
@@ -198,7 +390,7 @@ namespace Relais
                 json = r.ReadToEnd();
             Dictionary<string, object> d = Settings.Json().Deserialize<Dictionary<string, object>>(json);
             Profile p = Settings.Json().ConvertToType<Profile>(d["profile"]);
-            if (p == null || string.IsNullOrEmpty(p.Name)) throw new FormatException("Code incomplet.");
+            if (p == null || string.IsNullOrEmpty(p.Name)) throw new FormatException(L.T("Code incomplet."));
             if (p.Members == null) p.Members = new List<Member>();
             string baseName = p.Name, name = baseName;
             for (int k = 2; ; k++)
@@ -267,6 +459,14 @@ namespace Relais
             ExpireFlashing();
             if (scanTick % 4 == 1) CheckTimers();
             if (scanTick % 12 == 2) ApplyAudio(true);
+            if (changed)
+            {
+                string cur = null;
+                foreach (GameWindow w in Windows) if (w.Handle == lastActiveDofus) cur = w.Name;
+                string tip = Paused ? L.T("Relais — en pause") : L.T("Relais · ") + Windows.Count + L.T(" perso(s)") + (cur != null ? " · " + cur : "");
+                if (tip.Length > 63) tip = tip.Substring(0, 63);
+                if (tray.Text != tip) tray.Text = tip;
+            }
             if (changed && StateChanged != null) StateChanged(this, EventArgs.Empty);
         }
 
@@ -349,7 +549,7 @@ namespace Relais
             if (v >= 100) S.CharVolume.Remove(name); else S.CharVolume[name] = Math.Max(0, v);
             S.Save();
             ApplyAudio(true);
-            Toast.ShowMessage("Volume de " + name + " : " + v + " %", false);
+            Toast.ShowMessage(L.T("Volume de ") + name + " : " + v + " %", false);
         }
 
         // ---------------- statistiques ----------------
@@ -390,7 +590,7 @@ namespace Relais
 
         void PruneStats()
         {
-            string limit = DateTime.Now.AddDays(-90).ToString("yyyy-MM-dd");
+            string limit = DateTime.Now.AddDays(-370).ToString("yyyy-MM-dd");
             List<string> old = new List<string>();
             foreach (string k in S.Stats.Keys) if (string.CompareOrdinal(k, limit) < 0) old.Add(k);
             foreach (string k in old) S.Stats.Remove(k);
@@ -416,7 +616,7 @@ namespace Relais
                 {
                     t.EndUtc = 0;
                     changed = true;
-                    Alarm("Minuteur terminé : " + t.Name);
+                    Alarm(L.T("Minuteur terminé : ") + t.Name);
                 }
             }
             DateTime local = DateTime.Now;
@@ -428,7 +628,7 @@ namespace Relais
                 {
                     r.LastFired = today;
                     changed = true;
-                    Alarm("Rappel : " + r.Name);
+                    Alarm(L.T("Rappel : ") + r.Name);
                 }
             }
             if (changed) { S.Save(); if (TimersChanged != null) TimersChanged(this, EventArgs.Empty); }
@@ -437,7 +637,8 @@ namespace Relais
         public void Alarm(string text)
         {
             Toast.ShowMessage(text, false, 8);
-            try { System.Media.SystemSounds.Asterisk.Play(); } catch { }
+            try { if (S.SoundsEnabled) Sounds.Play(S, Sounds.Kind.Timer); else System.Media.SystemSounds.Asterisk.Play(); } catch { }
+            Record("timer", text);
             try { tray.ShowBalloonTip(6000, "Relais", text, ToolTipIcon.Info); } catch { }
             Program.Log(text);
             if (S.RemoteTimers) Remote.Send(S, "Relais", text, false);
@@ -466,20 +667,20 @@ namespace Relais
 
         public void CopyInvite(string name)
         {
-            if (CopyText("/invite " + name)) Toast.ShowMessage("Copié : /invite " + name + " — colle-le dans le chat", false);
+            if (CopyText(L.T("/invite ") + name)) Toast.ShowMessage(L.T("Copié : /invite ") + name + L.T(" — colle-le dans le chat"), false);
         }
 
         /// <summary>Copie l'invitation du perso suivant de la team (le chef invite les autres).</summary>
         public void InviteNext()
         {
             List<GameWindow> rot = Rotation();
-            if (rot.Count < 2) { Toast.ShowMessage("Il faut au moins 2 persos connectés", false); return; }
+            if (rot.Count < 2) { Toast.ShowMessage(L.T("Il faut au moins 2 persos connectés"), false); return; }
             int n = rot.Count - 1;
             if ((DateTime.Now - lastInvite).TotalSeconds > 90 || inviteIndex >= n) inviteIndex = 0;
             lastInvite = DateTime.Now;
             string name = rot[inviteIndex + 1].Name;
-            if (CopyText("/invite " + name))
-                Toast.ShowMessage("Copié : /invite " + name + " (" + (inviteIndex + 1) + "/" + n + ") — colle dans le chat de " + rot[0].Name, false, 4);
+            if (CopyText(L.T("/invite ") + name))
+                Toast.ShowMessage(L.T("Copié : /invite ") + name + " (" + (inviteIndex + 1) + "/" + n + L.T(") — colle dans le chat de ") + rot[0].Name, false, 4);
             inviteIndex++;
         }
 
@@ -497,10 +698,10 @@ namespace Relais
                 p.Max = Native.IsZoomed(w.Handle);
                 list.Add(p);
             }
-            if (list.Count == 0) { Toast.ShowMessage("Aucune fenêtre à enregistrer", false); return; }
+            if (list.Count == 0) { Toast.ShowMessage(L.T("Aucune fenêtre à enregistrer"), false); return; }
             S.GetCurrent().Layout = list;
             S.Save();
-            Toast.ShowMessage("Disposition enregistrée pour « " + S.GetCurrent().Name + " » (" + list.Count + " fenêtres)", false);
+            Toast.ShowMessage(L.T("Disposition enregistrée pour « ") + S.GetCurrent().Name + " » (" + list.Count + L.T(" fenêtres)"), false);
             if (ProfileChanged != null) ProfileChanged(this, EventArgs.Empty);
         }
 
@@ -509,7 +710,7 @@ namespace Relais
             List<WinPos> layout = S.GetCurrent().Layout;
             if (layout == null || layout.Count == 0)
             {
-                if (!quiet) Toast.ShowMessage("Aucune disposition enregistrée pour ce profil", false);
+                if (!quiet) Toast.ShowMessage(L.T("Aucune disposition enregistrée pour ce profil"), false);
                 return;
             }
             List<WindowLayout.Target> plan = new List<WindowLayout.Target>();
@@ -523,7 +724,7 @@ namespace Relais
                 t.Maximize = p.Max;
                 plan.Add(t);
             }
-            RunLayout(plan, "restaurée", IntPtr.Zero);
+            RunLayout(plan, L.T("restaurée"), IntPtr.Zero);
         }
 
         // ---------------- apparence des persos ----------------
@@ -610,7 +811,7 @@ namespace Relais
         public void CaptureAvatar(string name)
         {
             GameWindow w = WindowOf(name);
-            if (w == null) { Toast.ShowMessage(name + " n'est pas connecté", false); return; }
+            if (w == null) { Toast.ShowMessage(name + L.T(" n'est pas connecté"), false); return; }
             Switcher.Activate(w.Handle);
             System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
             t.Interval = 450;
@@ -623,14 +824,14 @@ namespace Relais
                     Rectangle r = WindowLayout.RectOf(w.Handle);
                     Rectangle vs = SystemInformation.VirtualScreen;
                     r.Intersect(vs);
-                    if (r.Width < 50 || r.Height < 50) throw new InvalidOperationException("fenêtre trop petite ou hors écran");
+                    if (r.Width < 50 || r.Height < 50) throw new InvalidOperationException(L.T("fenêtre trop petite ou hors écran"));
                     shot = new Bitmap(r.Width, r.Height);
                     using (Graphics g = Graphics.FromImage(shot)) g.CopyFromScreen(r.Location, Point.Empty, r.Size);
                 }
                 catch (Exception ex)
                 {
                     if (shot != null) shot.Dispose();
-                    MessageBox.Show(Main, "Capture impossible : " + ex.Message, "Relais");
+                    MessageBox.Show(Main, L.T("Capture impossible : ") + ex.Message, "Relais");
                     return;
                 }
                 ShowMain();
@@ -657,7 +858,7 @@ namespace Relais
             S.CharImages[name] = dest;
             S.Save();
             NotifyProfileChanged();
-            Toast.ShowMessage("Avatar de " + name + " mis à jour", false);
+            Toast.ShowMessage(L.T("Avatar de ") + name + L.T(" mis à jour"), false);
         }
 
         public void SetNote(string name, string note)
@@ -697,10 +898,11 @@ namespace Relais
             }
             if (lost.Count == 0) return;
             string who = string.Join(", ", lost.ToArray());
-            Toast.ShowMessage(lost.Count == 1 ? who + " s'est déconnecté" : who + " se sont déconnectés", true);
-            if (S.AlertSound) System.Media.SystemSounds.Exclamation.Play();
+            Toast.ShowMessage(lost.Count == 1 ? who + L.T(" s'est déconnecté") : who + L.T(" se sont déconnectés"), true);
+            if (S.AlertSound) { if (S.SoundsEnabled) Sounds.Play(S, Sounds.Kind.Disconnect); else System.Media.SystemSounds.Exclamation.Play(); }
+            Record("deco", lost.Count == 1 ? who + L.T(" s'est déconnecté") : who + L.T(" se sont déconnectés"));
             Program.Log("Déconnexion : " + who);
-            if (S.RemoteDisconnect) Remote.Send(S, "Déconnexion", who + (lost.Count == 1 ? " s'est déconnecté" : " se sont déconnectés"), false);
+            if (S.RemoteDisconnect) Remote.Send(S, L.T("Déconnexion"), who + (lost.Count == 1 ? L.T(" s'est déconnecté") : L.T(" se sont déconnectés")), false);
         }
 
         void AutoAdd()
@@ -755,8 +957,10 @@ namespace Relais
         {
             GameWindow w = WindowOf(name);
             if (w == null) return;
+            bool changedChar = Native.GetForegroundWindow() != w.Handle;
             Switcher.Activate(w.Handle);
             ForegroundHandle = Native.GetForegroundWindow();
+            if (changedChar) Sounds.Play(S, Sounds.Kind.Switch);
             if (StateChanged != null) StateChanged(this, EventArgs.Empty);
         }
 
@@ -786,25 +990,26 @@ namespace Relais
         public void StackWindows()
         {
             List<GameWindow> rot = Rotation();
-            if (rot.Count < 2) { Toast.ShowMessage("Il faut au moins 2 persos connectés", false); return; }
+            if (rot.Count < 2) { Toast.ShowMessage(L.T("Il faut au moins 2 persos connectés"), false); return; }
             IntPtr fg = Native.GetForegroundWindow();
             IntPtr reference = dofusHandles.Contains(fg) ? fg : rot[0].Handle;
             if (Native.IsIconic(reference)) Native.ShowWindow(reference, Native.SW_RESTORE);
             if (WindowLayout.IsFullscreen(reference))
             {
-                Toast.ShowMessage("Cette fenêtre Dofus est en plein écran : passe Dofus en mode fenêtré pour superposer", true, 6);
+                Toast.ShowMessage(L.T("Cette fenêtre Dofus est en plein écran : passe Dofus en mode fenêtré pour superposer"), true, 6);
                 Program.Log("Superposer : référence en plein écran\r\n  " + WindowLayout.Describe(WindowOfHandle(reference)));
                 return;
             }
-            RunLayout(WindowLayout.PlanStack(rot, reference), "alignée", reference);
+            RunLayout(WindowLayout.PlanStack(rot, reference), L.T("alignée"), reference);
         }
 
         public void MosaicWindows()
         {
             List<GameWindow> rot = Rotation();
-            if (rot.Count == 0) { Toast.ShowMessage("Aucun perso connecté", false); return; }
+            if (rot.Count == 0) { Toast.ShowMessage(L.T("Aucun perso connecté"), false); return; }
             IntPtr fg = Native.GetForegroundWindow();
-            RunLayout(WindowLayout.PlanMosaic(rot, dofusHandles.Contains(fg) ? fg : rot[0].Handle), "placée", IntPtr.Zero);
+            Screen chosen = ScreenByName(S.LayoutScreen);
+            RunLayout(WindowLayout.PlanMosaic(rot, dofusHandles.Contains(fg) ? fg : rot[0].Handle, chosen != null ? chosen.WorkingArea : Rectangle.Empty), L.T("placée"), IntPtr.Zero);
         }
 
         GameWindow WindowOfHandle(IntPtr h)
@@ -816,7 +1021,7 @@ namespace Relais
         /// <summary>Applique un plan de positions puis vérifie ce que Dofus a réellement accepté.</summary>
         void RunLayout(List<WindowLayout.Target> plan, string verb, IntPtr activateAfter)
         {
-            if (plan.Count == 0) { Toast.ShowMessage("Rien à déplacer", false); return; }
+            if (plan.Count == 0) { Toast.ShowMessage(L.T("Rien à déplacer"), false); return; }
             HashSet<IntPtr> fullscreen = new HashSet<IntPtr>();
             foreach (WindowLayout.Target t in plan) if (WindowLayout.IsFullscreen(t.Win.Handle)) fullscreen.Add(t.Win.Handle);
             WindowLayout.Apply(plan);
@@ -833,10 +1038,10 @@ namespace Relais
                 int ok = plan.Count - failed.Count;
                 if (failed.Count == 0)
                 {
-                    Toast.ShowMessage(ok + " fenêtre" + (ok > 1 ? "s" : "") + " " + verb + (ok > 1 ? "s" : ""), false);
+                    Toast.ShowMessage(ok + L.T(" fenêtre") + (ok > 1 ? "s" : "") + " " + verb + (ok > 1 && !L.En ? "s" : ""), false);
                     return;
                 }
-                StringBuilderLog("Rangement : " + failed.Count + "/" + plan.Count + " fenêtre(s) refusée(s)", failed);
+                StringBuilderLog(L.T("Rangement : ") + failed.Count + "/" + plan.Count + L.T(" fenêtre(s) refusée(s)"), failed);
                 bool denied = false, full = false, tooSmall = false;
                 foreach (WindowLayout.Target t in failed)
                 {
@@ -845,15 +1050,15 @@ namespace Relais
                     System.Drawing.Rectangle r = WindowLayout.RectOf(t.Win.Handle);
                     if (!t.Maximize && (r.Width > t.Want.Width + 16 || r.Height > t.Want.Height + 16)) tooSmall = true;
                 }
-                string who = failed.Count == 1 ? failed[0].Win.Name : failed.Count + " fenêtres";
+                string who = failed.Count == 1 ? failed[0].Win.Name : failed.Count + L.T(" fenêtres");
                 if (denied)
-                    Toast.ShowMessage("Windows bloque le déplacement : Dofus est lancé en admin. Options > Relancer Relais en admin", true, 8);
+                    Toast.ShowMessage(L.T("Windows bloque le déplacement : Dofus est lancé en admin. Options > Relancer Relais en admin"), true, 8);
                 else if (full)
-                    Toast.ShowMessage(who + " en plein écran : passe Dofus en mode fenêtré (options d'affichage du jeu)", true, 8);
+                    Toast.ShowMessage(who + L.T(" en plein écran : passe Dofus en mode fenêtré (options d'affichage du jeu)"), true, 8);
                 else if (tooSmall)
-                    Toast.ShowMessage(who + " : Dofus impose une taille minimale, la grille est trop petite pour cet écran", true, 8);
+                    Toast.ShowMessage(who + L.T(" : Dofus impose une taille minimale, la grille est trop petite pour cet écran"), true, 8);
                 else
-                    Toast.ShowMessage(who + " n'a pas bougé — Options > Diagnostic des fenêtres, puis envoie-le à Claude", true, 8);
+                    Toast.ShowMessage(who + L.T(" n'a pas bougé — Options > Diagnostic des fenêtres, puis envoie-le à Claude"), true, 8);
             };
             check.Start();
         }
@@ -862,8 +1067,32 @@ namespace Relais
         {
             System.Text.StringBuilder sb = new System.Text.StringBuilder(title);
             foreach (WindowLayout.Target t in failed)
-                sb.Append("\r\n  voulu " + t.Want.X + "," + t.Want.Y + " " + t.Want.Width + "×" + t.Want.Height + (t.Denied ? " (accès refusé)" : "") + "\r\n  " + WindowLayout.Describe(t.Win));
+                sb.Append("\r\n  voulu " + t.Want.X + "," + t.Want.Y + " " + t.Want.Width + "×" + t.Want.Height + (t.Denied ? L.T(" (accès refusé)") : "") + "\r\n  " + WindowLayout.Describe(t.Win));
             Program.Log(sb.ToString());
+        }
+
+        /// <summary>Écran choisi dans les options (null = automatique ou écran débranché).</summary>
+        public static Screen ScreenByName(string device)
+        {
+            if (string.IsNullOrEmpty(device)) return null;
+            foreach (Screen s in Screen.AllScreens) if (s.DeviceName == device) return s;
+            return null;
+        }
+
+        /// <summary>« Écran 2 · 1920×1080 » pour l'interface.</summary>
+        public static string ScreenLabel(Screen s)
+        {
+            Screen[] all = Screen.AllScreens;
+            int idx = Array.IndexOf(all, s) + 1;
+            return L.T("Écran ") + idx + " · " + s.Bounds.Width + "×" + s.Bounds.Height + (s.Primary ? L.T(" (principal)") : "");
+        }
+
+        /// <summary>Envoie toute la team en mosaïque sur un écran précis.</summary>
+        public void TeamToScreen(Screen s)
+        {
+            List<GameWindow> rot = Rotation();
+            if (rot.Count == 0 || s == null) return;
+            RunLayout(WindowLayout.PlanMosaic(rot, rot[0].Handle, s.WorkingArea), L.T("placée"), IntPtr.Zero);
         }
 
         /// <summary>Texte complet de diagnostic (copiable).</summary>
@@ -871,12 +1100,12 @@ namespace Relais
         {
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
             bool? me = Native.IsElevated((uint)System.Diagnostics.Process.GetCurrentProcess().Id);
-            sb.Append("Relais " + typeof(App).Assembly.GetName().Version + " — admin : " + (me == true ? "OUI" : "non") + "\r\n");
-            sb.Append("Windows " + Environment.OSVersion.Version + (Environment.Is64BitProcess ? " · 64 bits" : " · 32 bits") + "\r\n");
-            sb.Append("Écoute des raccourcis : " + HookStatus + "\r\n");
+            sb.Append(L.T("Relais ") + typeof(App).Assembly.GetName().Version + L.T(" — admin : ") + (me == true ? "OUI" : "non") + "\r\n");
+            sb.Append(L.T("Windows ") + Environment.OSVersion.Version + (Environment.Is64BitProcess ? L.T(" · 64 bits") : L.T(" · 32 bits")) + "\r\n");
+            sb.Append(L.T("Écoute des raccourcis : ") + HookStatus + "\r\n");
             foreach (Screen sc in Screen.AllScreens)
-                sb.Append("Écran " + sc.DeviceName + " : " + sc.Bounds.Width + "×" + sc.Bounds.Height + " à " + sc.Bounds.X + "," + sc.Bounds.Y + (sc.Primary ? " (principal)" : "") + "\r\n");
-            sb.Append("\r\n" + Windows.Count + " fenêtre(s) Dofus détectée(s) :\r\n");
+                sb.Append(L.T("Écran ") + sc.DeviceName + " : " + sc.Bounds.Width + "×" + sc.Bounds.Height + L.T(" à ") + sc.Bounds.X + "," + sc.Bounds.Y + (sc.Primary ? L.T(" (principal)") : "") + "\r\n");
+            sb.Append("\r\n" + Windows.Count + L.T(" fenêtre(s) Dofus détectée(s) :\r\n"));
             foreach (GameWindow w in Windows) sb.Append("• " + WindowLayout.Describe(w) + "\r\n");
             return sb.ToString();
         }
@@ -892,7 +1121,8 @@ namespace Relais
                 ProfileEdited();
                 if (S.AutoApplyLayout) ApplyLayout(true);
             }
-            Toast.ShowMessage("Profil : " + name, false);
+            Toast.ShowMessage(L.T("Profil : ") + name, false);
+            Record("profile", L.T("Profil « ") + name + " »");
         }
 
         void RebuildTrayProfiles()
@@ -919,14 +1149,20 @@ namespace Relais
             if (gw == null) return;
             bool isNew = !flashing.ContainsKey(h);
             flashing[h] = DateTime.Now;
-            if (isNew && StateChanged != null) StateChanged(this, EventArgs.Empty);
+            if (isNew)
+            {
+                if (StateChanged != null) StateChanged(this, EventArgs.Empty);
+                Sounds.Play(S, Sounds.Kind.Turn);
+                Record("turn", L.T("Tour de ") + gw.Name);
+                Combat.Signal(gw.Name, true);
+            }
             if (S.RemoteTurn)
             {
                 DateTime lr;
                 if (!lastRemoteTurn.TryGetValue(h, out lr) || (DateTime.Now - lr).TotalSeconds > 20)
                 {
                     lastRemoteTurn[h] = DateTime.Now;
-                    Remote.Send(S, "Dofus", gw.Name + " te réclame (début de tour ou notification)", false);
+                    Remote.Send(S, "Dofus", gw.Name + L.T(" te réclame (début de tour ou notification)"), false);
                 }
             }
             if (!S.AutoSwitchOnTurn || Paused) return;
@@ -942,9 +1178,9 @@ namespace Relais
         public void TogglePause()
         {
             Paused = !Paused;
-            Toast.ShowMessage(Paused ? "Relais en pause" : "Relais actif", false);
-            trayPause.Text = Paused ? "Reprendre" : "Mettre en pause";
-            tray.Text = Paused ? "Relais — en pause" : "Relais — organizer multicompte";
+            Toast.ShowMessage(Paused ? L.T("Relais en pause") : L.T("Relais actif"), false);
+            trayPause.Text = Paused ? L.T("Reprendre") : L.T("Mettre en pause");
+            tray.Text = Paused ? L.T("Relais — en pause") : L.T("Relais — organizer multicompte");
             if (StateChanged != null) StateChanged(this, EventArgs.Empty);
         }
 
@@ -992,7 +1228,19 @@ namespace Relais
             }
             catch { }
             hook.Dispose();
-            S.Save();
+            if (Phone != null) Phone.Stop();
+            if (!SkipSaveOnExit)
+            {
+                S.Save();
+                if (S.AutoSync && !string.IsNullOrEmpty(S.GistToken) && syncDirty)
+                {
+                    // dernier envoi, limité à quelques secondes
+                    string payload = CloudSync.Payload(S);
+                    Thread t = new Thread(delegate () { try { CloudSync.Upload(S, payload); } catch { } });
+                    t.IsBackground = true; t.Start(); t.Join(6000);
+                    S.Save();
+                }
+            }
             tray.Visible = false;
             tray.Dispose();
             Bar.Close();
@@ -1034,11 +1282,18 @@ namespace Relais
             Bind(b, S.KeyInvite, delegate { InviteNext(); });
             Bind(b, S.KeyLayout, delegate { ApplyLayout(false); });
             Bind(b, S.KeyPreview, delegate { TogglePreviewWall(); });
+            Bind(b, S.KeyPalette, delegate { OpenPalette(); });
             Bind(b, S.KeyLastChar, delegate { LastChar(); });
             foreach (Profile prof in S.Profiles)
             {
                 string pn = prof.Name;
                 Bind(b, prof.Hotkey, delegate { SwitchProfile(pn); });
+            }
+            if (S.WheelCycle)
+            {
+                string down = new Hotkey(Hotkey.ALT, Hotkey.WHEELDOWN).ToString(), up = new Hotkey(Hotkey.ALT, Hotkey.WHEELUP).ToString();
+                if (!b.ContainsKey(down)) b[down] = delegate { Step(+1); };
+                if (!b.ContainsKey(up)) b[up] = delegate { Step(-1); };
             }
             Hotkey p = Hotkey.Parse(S.KeyPause);
             pauseKey = p == null ? null : p.ToString();
@@ -1055,7 +1310,7 @@ namespace Relais
         // ---------------- écoute des raccourcis : nouvel essai puis mode de secours ----------------
 
         FallbackHotkeys fallback;
-        public string HookStatus { get { return hook == null ? "non démarrée" : hook.Status + (fallback != null ? " — mode de secours (clavier via Windows)" : ""); } }
+        public string HookStatus { get { return hook == null ? L.T("non démarrée") : hook.Status + (fallback != null ? L.T(" — mode de secours (clavier via Windows)") : ""); } }
 
         void RetryHook(int attempt)
         {
@@ -1079,7 +1334,7 @@ namespace Relais
                 Program.Log("Écoute des raccourcis impossible : " + hook.Status + " — passage en mode de secours");
                 try { fallback = new FallbackHotkeys(this); fallback.Rebuild(bindings); UpdateFallbackRegistration(); }
                 catch (Exception ex) { Program.Log("Mode de secours : " + ex.Message); fallback = null; }
-                Toast.ShowMessage("Raccourcis en mode de secours : clavier uniquement (boutons de souris indisponibles)", true, 8);
+                Toast.ShowMessage(L.T("Raccourcis en mode de secours : clavier uniquement (boutons de souris indisponibles)"), true, 8);
             };
             t.Start();
         }
@@ -1173,19 +1428,20 @@ namespace Relais
             string id = hk.ToString();
             foreach (Member m in S.GetCurrent().Members)
                 if (!ReferenceEquals(m, except) && Same(m.Hotkey, id)) return m.Name;
-            if (!"next".Equals(except) && Same(S.KeyNext, id)) return "Perso suivant";
-            if (!"prev".Equals(except) && Same(S.KeyPrev, id)) return "Perso précédent";
-            if (!"leader".Equals(except) && Same(S.KeyLeader, id)) return "Chef de team";
-            if (!"bar".Equals(except) && Same(S.KeyToggleBar, id)) return "Afficher la barre";
+            if (!"next".Equals(except) && Same(S.KeyNext, id)) return L.T("Perso suivant");
+            if (!"prev".Equals(except) && Same(S.KeyPrev, id)) return L.T("Perso précédent");
+            if (!"leader".Equals(except) && Same(S.KeyLeader, id)) return L.T("Chef de team");
+            if (!"bar".Equals(except) && Same(S.KeyToggleBar, id)) return L.T("Afficher la barre");
             if (!"pause".Equals(except) && Same(S.KeyPause, id)) return "Pause";
-            if (!"stack".Equals(except) && Same(S.KeyStack, id)) return "Superposer les fenêtres";
-            if (!"mosaic".Equals(except) && Same(S.KeyMosaic, id)) return "Mosaïque";
-            if (!"invite".Equals(except) && Same(S.KeyInvite, id)) return "Invitation suivante";
-            if (!"layout".Equals(except) && Same(S.KeyLayout, id)) return "Restaurer la disposition";
-            if (!"preview".Equals(except) && Same(S.KeyPreview, id)) return "Aperçus en direct";
-            if (!"lastchar".Equals(except) && Same(S.KeyLastChar, id)) return "Perso d'avant";
+            if (!"stack".Equals(except) && Same(S.KeyStack, id)) return L.T("Superposer les fenêtres");
+            if (!"mosaic".Equals(except) && Same(S.KeyMosaic, id)) return L.T("Mosaïque");
+            if (!"invite".Equals(except) && Same(S.KeyInvite, id)) return L.T("Invitation suivante");
+            if (!"layout".Equals(except) && Same(S.KeyLayout, id)) return L.T("Restaurer la disposition");
+            if (!"preview".Equals(except) && Same(S.KeyPreview, id)) return L.T("Aperçus en direct");
+            if (!"palette".Equals(except) && Same(S.KeyPalette, id)) return L.T("Palette de commandes");
+            if (!"lastchar".Equals(except) && Same(S.KeyLastChar, id)) return L.T("Perso d'avant");
             foreach (Profile p in S.Profiles)
-                if (!ReferenceEquals(p, except) && Same(p.Hotkey, id)) return "Profil « " + p.Name + " »";
+                if (!ReferenceEquals(p, except) && Same(p.Hotkey, id)) return L.T("Profil « ") + p.Name + " »";
             return null;
         }
 
@@ -1331,8 +1587,8 @@ namespace Relais
         static bool crashing;
         static void Crash(Exception ex, bool fatal)
         {
-            string text = ex == null ? "Erreur inconnue" : ex.ToString();
-            Log((fatal ? "ERREUR FATALE : " : "ERREUR : ") + text);
+            string text = ex == null ? L.T("Erreur inconnue") : ex.ToString();
+            Log((fatal ? L.T("ERREUR FATALE : ") : L.T("ERREUR : ")) + text);
             if (crashing) return;
             crashing = true;
             try
@@ -1340,10 +1596,10 @@ namespace Relais
                 Clipboard.SetText(text);
             }
             catch { }
-            MessageBox.Show("Relais a rencontré une erreur" + (fatal ? " et doit se fermer" : "") + ".\n\n" +
+            MessageBox.Show(L.T("Relais a rencontré une erreur") + (fatal ? L.T(" et doit se fermer") : "") + ".\n\n" +
                 (ex == null ? "" : ex.GetType().Name + " : " + ex.Message) +
-                "\n\nLe détail a été copié dans le presse-papiers et enregistré dans :\n" + LogPath +
-                "\n\nColle-le à Claude pour qu'il corrige.", "Relais — erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                L.T("\n\nLe détail a été copié dans le presse-papiers et enregistré dans :\n") + LogPath +
+                L.T("\n\nColle-le à Claude pour qu'il corrige."), L.T("Relais — erreur"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             crashing = false;
             if (fatal) Environment.Exit(1);
         }
@@ -1364,11 +1620,11 @@ namespace Relais
                 catch (AbandonedMutexException) { created = true; }
                 if (!created)
                 {
-                    MessageBox.Show("Relais est déjà lancé (regarde dans la zone de notification, en bas à droite).", "Relais",
+                    MessageBox.Show(L.T("Relais est déjà lancé (regarde dans la zone de notification, en bas à droite)."), "Relais",
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
-                Log("Démarrage de Relais " + typeof(Program).Assembly.GetName().Version + " — " + Environment.OSVersion + ", .NET " + Environment.Version + (Environment.Is64BitProcess ? " 64 bits" : " 32 bits"));
+                Log(L.T("Démarrage de Relais ") + typeof(Program).Assembly.GetName().Version + " — " + Environment.OSVersion + L.T(", .NET ") + Environment.Version + (Environment.Is64BitProcess ? L.T(" 64 bits") : L.T(" 32 bits")));
                 Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
                 Application.ThreadException += delegate (object s, System.Threading.ThreadExceptionEventArgs e) { Crash(e.Exception, false); };
                 AppDomain.CurrentDomain.UnhandledException += delegate (object s, UnhandledExceptionEventArgs e) { Crash(e.ExceptionObject as Exception, true); };
@@ -1377,8 +1633,9 @@ namespace Relais
                     try { Native.SetProcessDPIAware(); } catch { }
                     Application.EnableVisualStyles();
                     Application.SetCompatibleTextRenderingDefault(false);
+                    ToolStripManager.Renderer = new WoodRenderer();
                     App app = new App();
-                    Log("Interface prête.");
+                    Log(L.T("Interface prête."));
                     Application.Run(app);
                 }
                 catch (Exception ex)

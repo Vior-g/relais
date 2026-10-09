@@ -33,6 +33,23 @@ namespace Relais
             app.ProfileChanged += delegate { ApplyLook(); UpdateVisibility(); if (Visible) Relayout(); };
             ApplyLook();
             StartPulse();
+            bool wasFight = false;
+            app.Combat.Changed += delegate
+            {
+                bool now = app.Combat.Active;
+                if (now != wasFight) { wasFight = now; if (Visible) Relayout(); }
+                else if (Visible) Invalidate(CombatRect());
+            };
+        }
+
+        bool Fight { get { return app.Combat != null && app.Combat.Active; } }
+
+        /// <summary>Zone « combat » (tour + chrono) ajoutée au bout de la barre pendant un combat.</summary>
+        Rectangle CombatRect()
+        {
+            int n = Math.Max(1, items.Count);
+            if (Vertical) return new Rectangle(Pad, Grip + Pad + n * (TileH + Pad), TileW, Theme.S(40));
+            return new Rectangle(Grip + Pad + n * (TileW + Pad), Pad, Theme.S(76), TileH);
         }
 
         protected override bool ShowWithoutActivation { get { return true; } }
@@ -112,8 +129,8 @@ namespace Relais
             items = app.Rotation();
             int n = Math.Max(1, items.Count);
             Size sz = Vertical
-                ? new Size(TileW + 2 * Pad, Grip + Pad + n * (TileH + Pad))
-                : new Size(Grip + Pad + n * (TileW + Pad), TileH + 2 * Pad);
+                ? new Size(TileW + 2 * Pad, Grip + Pad + n * (TileH + Pad) + (Fight ? Theme.S(40) + Pad : 0))
+                : new Size(Grip + Pad + n * (TileW + Pad) + (Fight ? Theme.S(76) + Pad : 0), TileH + 2 * Pad);
             if (Size != sz) Size = sz;
             Invalidate();
         }
@@ -144,7 +161,7 @@ namespace Relais
             if (items.Count == 0)
             {
                 Rectangle r = TileRect(0);
-                Theme.DrawText(g, "Aucun perso", Theme.Small, Theme.Faint, r, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                Theme.DrawText(g, L.T("Aucun perso"), Theme.Small, Theme.Faint, r, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 return;
             }
 
@@ -199,16 +216,38 @@ namespace Relais
                     Rectangle t2 = new Rectangle(tr.X, tr.Y + tr.Height / 2 + Theme.S(1), tr.Width, Theme.S(15));
                     Theme.DrawText(g, w.Name, active ? Theme.SmallBold : Theme.Small, active ? Theme.Text : Theme.Muted, t1,
                         TextFormatFlags.Left | TextFormatFlags.Bottom | TextFormatFlags.EndEllipsis);
-                    string sub = flash && !active ? "à toi !" : (w.Class.Length > 0 ? w.Class : "");
-                    Theme.DrawText(g, sub, Theme.F(7f, FontStyle.Regular), flash && !active ? Theme.Accent : Theme.Faint, t2,
+                    bool plays = Fight && string.Equals(app.Combat.Current, w.Name, StringComparison.OrdinalIgnoreCase);
+                    string sub = flash && !active ? L.T("à toi !") : plays ? L.T("joue") : (w.Class.Length > 0 ? w.Class : "");
+                    Theme.DrawText(g, sub, Theme.F(7f, FontStyle.Regular), (flash && !active) || plays ? Theme.Accent : Theme.Faint, t2,
                         TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.EndEllipsis);
                 }
+            }
+
+            if (Fight)
+            {
+                // repère du perso qui joue (la barre suit l'ordre d'initiative)
+                for (int i = 0; i < items.Count; i++)
+                    if (string.Equals(app.Combat.Current, items[i].Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Rectangle r = TileRect(i);
+                        float cx = Vertical ? r.X + Theme.S(3) : r.X + r.Width / 2f, cy = Vertical ? r.Y + r.Height / 2f : r.Bottom + Pad / 2f;
+                        Brand.Diamond(g, Theme.Accent, cx, cy, Theme.S(3));
+                    }
+                Rectangle cr = CombatRect();
+                Theme.FillRound(g, Color.FromArgb(Theme.IsLight ? 60 : 50, Theme.Accent), cr, Theme.S(12));
+                Theme.StrokeRound(g, Color.FromArgb(140, Theme.Accent), 1f, cr, Theme.S(12));
+                TimeSpan el = app.Combat.Elapsed;
+                Rectangle a1 = new Rectangle(cr.X, cr.Y + cr.Height / 2 - Theme.S(17), cr.Width, Theme.S(18));
+                Rectangle a2 = new Rectangle(cr.X, cr.Y + cr.Height / 2 + Theme.S(1), cr.Width, Theme.S(15));
+                Theme.DrawText(g, L.T("Tour ") + app.Combat.Round, Theme.SmallBold, Theme.Accent, a1, TextFormatFlags.HorizontalCenter | TextFormatFlags.Bottom);
+                Theme.DrawText(g, ((int)el.TotalMinutes) + ":" + el.Seconds.ToString("00"), Theme.F(7.5f, FontStyle.Regular), Theme.Muted, a2,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.Top);
             }
 
             if (app.Paused)
             {
                 using (SolidBrush b2 = new SolidBrush(Color.FromArgb(170, Theme.Sidebar))) g.FillRectangle(b2, TileRect(0).X, 0, Width, Height);
-                Theme.DrawText(g, "EN PAUSE", Theme.Serif(9f, FontStyle.Bold), Theme.Accent, ClientRectangle, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                Theme.DrawText(g, L.T("EN PAUSE"), Theme.Serif(9f, FontStyle.Bold), Theme.Accent, ClientRectangle, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
         }
 
@@ -252,7 +291,7 @@ namespace Relais
                     GameWindow w = items[h];
                     Member m = app.S.GetCurrent().Find(w.Name);
                     Hotkey hk = m == null ? null : Hotkey.Parse(m.Hotkey);
-                    string t = w.Name + (w.Class.Length > 0 ? " (" + w.Class + ")" : "") + (hk != null ? "\nRaccourci : " + hk.Display() : "");
+                    string t = w.Name + (w.Class.Length > 0 ? " (" + w.Class + ")" : "") + (hk != null ? L.T("\nRaccourci : ") + hk.Display() : "");
                     string note = app.NoteOf(w.Name);
                     if (note != null) t += "\n\n" + (note.Length > 300 ? note.Substring(0, 300) + "…" : note);
                     tip.SetToolTip(this, t);
@@ -265,7 +304,7 @@ namespace Relais
                 }
                 else
                 {
-                    tip.SetToolTip(this, "Glisser pour déplacer · clic droit : options");
+                    tip.SetToolTip(this, L.T("Glisser pour déplacer · clic droit : options"));
                     app.Hover.HidePreview();
                 }
             }
@@ -304,6 +343,7 @@ namespace Relais
                     app.Hover.HidePreview();
                     RadialMenu.Open(app, items[ti], PointToScreen(new Point(tr.X + Theme.S(7) + Av / 2, tr.Y + tr.Height / 2)));
                 }
+                else if (Fight && CombatRect().Contains(e.Location)) ShowCombatMenu(e.Location);
                 else ShowMenu(e.Location);
                 return;
             }
@@ -314,21 +354,28 @@ namespace Relais
             }
         }
 
+        void ShowCombatMenu(Point p)
+        {
+            ContextMenuStrip cm = new ContextMenuStrip();
+            cm.Items.Add(L.T("Terminer ce combat"), null, delegate { app.Combat.EndNow(); });
+            cm.Show(this, p);
+        }
+
         void ShowMenu(Point p)
         {
             ContextMenuStrip cm = new ContextMenuStrip();
-            cm.Items.Add("Ouvrir Relais", null, delegate { app.ShowMain(); });
-            cm.Items.Add(app.Paused ? "Reprendre" : "Mettre en pause", null, delegate { app.TogglePause(); });
-            cm.Items.Add(Vertical ? "Barre horizontale" : "Barre verticale", null, delegate
+            cm.Items.Add(L.T("Ouvrir Relais"), null, delegate { app.ShowMain(); });
+            cm.Items.Add(app.Paused ? L.T("Reprendre") : L.T("Mettre en pause"), null, delegate { app.TogglePause(); });
+            cm.Items.Add(Vertical ? L.T("Barre horizontale") : L.T("Barre verticale"), null, delegate
             {
                 app.S.BarVertical = !app.S.BarVertical; app.S.Save(); Relayout(); app.ProfileEdited();
             });
-            cm.Items.Add(Names ? "Masquer les noms" : "Afficher les noms", null, delegate
+            cm.Items.Add(Names ? L.T("Masquer les noms") : L.T("Afficher les noms"), null, delegate
             {
                 app.S.BarShowNames = !app.S.BarShowNames; app.S.Save(); Relayout(); app.ProfileEdited();
             });
             cm.Items.Add(new ToolStripSeparator());
-            cm.Items.Add("Masquer la barre", null, delegate { app.ToggleBar(); });
+            cm.Items.Add(L.T("Masquer la barre"), null, delegate { app.ToggleBar(); });
             cm.Show(this, p);
         }
     }
@@ -430,7 +477,7 @@ namespace Relais
             this.app = app;
             win = w;
             bool muted = app.VolumeOf(w.Name) == 0;
-            labels = new string[] { "Aller", "Fiche", muted ? "Son" : "Muet", "Inviter" };
+            labels = new string[] { L.T("Aller"), L.T("Fiche"), muted ? L.T("Son") : L.T("Muet"), L.T("Inviter") };
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             TopMost = true;

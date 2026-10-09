@@ -11,14 +11,14 @@ namespace Relais
         readonly App app;
         int page;
         readonly Panel body = new Panel();
-        readonly FlatButton next = new FlatButton("Suivant"), back = new FlatButton("Retour");
+        readonly FlatButton next = new FlatButton(L.T("Suivant")), back = new FlatButton(L.T("Retour"));
         readonly Label step = new Label();
         Toggle tF, tMouse, tBar, tOverlay, tTurn, tPrio;
 
         public Onboarding(App app)
         {
             this.app = app;
-            Text = "Bienvenue dans Relais 2.0";
+            Text = L.T("Bienvenue dans Relais");
             Chrome.Hook(this);
             Icon = app.AppIcon;
             BackColor = Theme.Bg; ForeColor = Theme.Text; Font = Theme.Normal;
@@ -37,12 +37,12 @@ namespace Relais
             next.Click += delegate { if (page == 3) Finish(); else { page++; Show2(); } };
             back.Click += delegate { if (page > 0) { page--; Show2(); } };
 
-            tF = new Toggle("Raccourcis F1, F2, F3… pour mes persos, dans l'ordre");
-            tMouse = new Toggle("Souris 5 / Souris 4 = perso suivant / précédent");
-            tBar = new Toggle("Mini-barre avec mes persos en haut de l'écran");
-            tOverlay = new Toggle("Petite vignette (nom + ordre) dans chaque fenêtre de jeu");
-            tTurn = new Toggle("Aller automatiquement au perso dont c'est le tour");
-            tPrio = new Toggle("Priorité CPU au perso que je joue");
+            tF = new Toggle(L.T("Raccourcis F1, F2, F3… pour mes persos, dans l'ordre"));
+            tMouse = new Toggle(L.T("Souris 5 / Souris 4 = perso suivant / précédent"));
+            tBar = new Toggle(L.T("Mini-barre avec mes persos en haut de l'écran"));
+            tOverlay = new Toggle(L.T("Petite vignette (nom + ordre) dans chaque fenêtre de jeu"));
+            tTurn = new Toggle(L.T("Aller automatiquement au perso dont c'est le tour"));
+            tPrio = new Toggle(L.T("Priorité CPU au perso que je joue"));
             tF.Checked = true; tMouse.Checked = true; tBar.Checked = app.S.ShowBar; tOverlay.Checked = app.S.OverlayEnabled;
             tTurn.Checked = app.S.AutoSwitchOnTurn; tPrio.Checked = app.S.PriorityBoost;
             Show2();
@@ -62,46 +62,46 @@ namespace Relais
             List<Control> c = new List<Control>();
             if (page == 0)
             {
-                c.Add(Para("Bienvenue dans Relais 2.0", Theme.Title, Theme.Text, 40));
-                c.Add(Para("L'organizer multicompte pour Dofus : une touche = une bascule de fenêtre, rien de plus côté jeu.", Theme.Normal, Theme.Muted, 44));
-                c.Add(Para("Nouveautés de la 2.0", Theme.Bold, Theme.Accent, 28));
-                c.Add(Para("• Aperçus en direct de tous tes comptes (idéal sur un 2e écran)\n• Vignette discrète dans chaque fenêtre + cadre sur le perso actif\n• Alertes sur ton téléphone (Discord ou ntfy) quand tu es absent\n• Carnet de craft relié à DofusDB, fiche de chaque perso\n• Codes de partage de team, thème clair, mises à jour automatiques", Theme.Normal, Theme.Text, 130));
-                c.Add(Para("Relais n'envoie jamais de clic ni de touche au jeu : chaque action en jeu, tu la fais toi-même, compte par compte (règle d'Ankama).", Theme.Small, Theme.Faint, 40));
+                c.Add(Para(L.T("Bienvenue dans Relais"), Theme.Title, Theme.Text, 40));
+                c.Add(Para(L.T("L'organizer multicompte pour Dofus : une touche = une bascule de fenêtre, rien de plus côté jeu."), Theme.Normal, Theme.Muted, 44));
+                c.Add(Para(L.T("Ce que Relais fait pour toi"), Theme.Bold, Theme.Accent, 28));
+                c.Add(Para(L.T("• Une touche par perso, bascule auto quand c'est ton tour en combat\n• Ctrl+K : palette de commandes pour tout faire au clavier\n• Aperçus en direct, vignette dans chaque fenêtre, mini-barre\n• Alertes téléphone, minuteurs, carnet de craft DofusDB, fiches de persos\n• Sons discrets, codes de partage de team, mises à jour automatiques"), Theme.Normal, Theme.Text, 130));
+                c.Add(Para(L.T("Relais n'envoie jamais de clic ni de touche au jeu : chaque action en jeu, tu la fais toi-même, compte par compte (règle d'Ankama)."), Theme.Small, Theme.Faint, 40));
             }
             else if (page == 1)
             {
-                c.Add(Para("Tes persos", Theme.Title, Theme.Text, 40));
+                c.Add(Para(L.T("Tes persos"), Theme.Title, Theme.Text, 40));
                 List<GameWindow> rot = app.Rotation();
                 if (rot.Count == 0)
-                    c.Add(Para("Aucun perso connecté pour l'instant. Lance Dofus et connecte tes comptes : ils apparaîtront tout seuls dans l'onglet Team.", Theme.Normal, Theme.Muted, 60));
+                    c.Add(Para(L.T("Aucun perso connecté pour l'instant. Lance Dofus et connecte tes comptes : ils apparaîtront tout seuls dans l'onglet Team."), Theme.Normal, Theme.Muted, 60));
                 else
                 {
                     string names = "";
                     for (int i = 0; i < rot.Count; i++) names += (i + 1) + ". " + rot[i].Name + (rot[i].Class.Length > 0 ? " (" + rot[i].Class + ")" : "") + "\n";
-                    c.Add(Para("Détectés :\n" + names, Theme.Normal, Theme.Text, 30 + 22 * rot.Count));
+                    c.Add(Para(L.T("Détectés :\n") + names, Theme.Normal, Theme.Text, 30 + 22 * rot.Count));
                 }
-                c.Add(Para("Astuce : dans l'onglet Team, glisse les lignes pour mettre l'ordre d'initiative. Le n°1 est ton chef de team. Clique sur un avatar pour sa fiche ou son image.", Theme.Small, Theme.Faint, 50));
-                c.Add(Para("Pour Superposer / Mosaïque, mets Dofus en mode fenêtré (pas plein écran).", Theme.Small, Theme.Faint, 30));
+                c.Add(Para(L.T("Astuce : dans l'onglet Team, glisse les lignes pour mettre l'ordre d'initiative. Le n°1 est ton chef de team. Clique sur un avatar pour sa fiche ou son image."), Theme.Small, Theme.Faint, 50));
+                c.Add(Para(L.T("Pour Superposer / Mosaïque, mets Dofus en mode fenêtré (pas plein écran)."), Theme.Small, Theme.Faint, 30));
             }
             else if (page == 2)
             {
-                c.Add(Para("Raccourcis", Theme.Title, Theme.Text, 40));
-                c.Add(Para("Choisis un départ simple, tu pourras tout changer dans l'onglet Raccourcis.", Theme.Normal, Theme.Muted, 30));
+                c.Add(Para(L.T("Raccourcis"), Theme.Title, Theme.Text, 40));
+                c.Add(Para(L.T("Choisis un départ simple, tu pourras tout changer dans l'onglet Raccourcis."), Theme.Normal, Theme.Muted, 30));
                 tF.Height = Theme.S(32); tMouse.Height = Theme.S(32);
                 tF.Dock = DockStyle.Top; tMouse.Dock = DockStyle.Top;
                 c.Add(tF); c.Add(tMouse);
-                c.Add(Para("Les raccourcis ne marchent que quand une fenêtre Dofus est au premier plan : ailleurs, tes touches restent normales. Touche Pause = mettre Relais en pause (pour écrire dans le chat).", Theme.Small, Theme.Faint, 60));
+                c.Add(Para(L.T("Les raccourcis ne marchent que quand une fenêtre Dofus est au premier plan : ailleurs, tes touches restent normales. Touche Pause = mettre Relais en pause (pour écrire dans le chat)."), Theme.Small, Theme.Faint, 60));
             }
             else
             {
-                c.Add(Para("Affichage & confort", Theme.Title, Theme.Text, 40));
+                c.Add(Para(L.T("Affichage & confort"), Theme.Title, Theme.Text, 40));
                 foreach (Toggle t in new Toggle[] { tBar, tOverlay, tTurn, tPrio }) { t.Height = Theme.S(32); t.Dock = DockStyle.Top; c.Add(t); }
-                c.Add(Para("Pour « tour automatique » : active dans Dofus la notification de début de tour avec clignotement de la fenêtre. Alertes téléphone et mises à jour : onglet Options.", Theme.Small, Theme.Faint, 50));
+                c.Add(Para(L.T("Pour « tour automatique » : active dans Dofus la notification de début de tour avec clignotement de la fenêtre. Alertes téléphone et mises à jour : onglet Options."), Theme.Small, Theme.Faint, 50));
             }
             for (int i = c.Count - 1; i >= 0; i--) body.Controls.Add(c[i]);
             back.Visible = page > 0;
-            next.Text = page == 3 ? "C'est parti !" : "Suivant";
-            step.Text = "Étape " + (page + 1) + " / 4";
+            next.Text = page == 3 ? L.T("C'est parti !") : L.T("Suivant");
+            step.Text = L.T("Étape ") + (page + 1) + " / 4";
         }
 
         void Finish()
@@ -152,7 +152,7 @@ namespace Relais
         public CropForm(Bitmap shot, string name)
         {
             this.shot = shot;
-            Text = "Avatar de " + name + " — encadre la tête de ton perso";
+            Text = L.T("Avatar de ") + name + L.T(" — encadre la tête de ton perso");
             Chrome.Hook(this);
             BackColor = Theme.Bg; ForeColor = Theme.Text; Font = Theme.Normal;
             StartPosition = FormStartPosition.CenterScreen;
@@ -162,13 +162,13 @@ namespace Relais
             ClientSize = new Size((int)(shot.Width * k) + Theme.S(40), (int)(shot.Height * k) + Theme.S(100));
             int side = Math.Min(shot.Width, shot.Height) / 4;
             sel = new Rectangle(shot.Width / 2 - side / 2, shot.Height / 2 - side / 2, side, side);
-            FlatButton ok = new FlatButton("Utiliser"); ok.Primary = true;
-            FlatButton cancel = new FlatButton("Annuler");
+            FlatButton ok = new FlatButton(L.T("Utiliser")); ok.Primary = true;
+            FlatButton cancel = new FlatButton(L.T("Annuler"));
             ok.Anchor = cancel.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
             ok.SetBounds(ClientSize.Width - Theme.S(140), ClientSize.Height - Theme.S(50), Theme.S(120), Theme.S(34));
             cancel.SetBounds(ClientSize.Width - Theme.S(270), ClientSize.Height - Theme.S(50), Theme.S(120), Theme.S(34));
             Label hint = new Label();
-            hint.Text = "Glisse le carré pour le déplacer, la poignée en bas à droite pour l'agrandir. Molette = taille.";
+            hint.Text = L.T("Glisse le carré pour le déplacer, la poignée en bas à droite pour l'agrandir. Molette = taille.");
             hint.ForeColor = Theme.Faint; hint.Font = Theme.Small; hint.AutoSize = false;
             hint.Anchor = AnchorStyles.Left | AnchorStyles.Bottom;
             hint.SetBounds(Theme.S(20), ClientSize.Height - Theme.S(52), ClientSize.Width - Theme.S(300), Theme.S(40));

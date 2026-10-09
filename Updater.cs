@@ -64,7 +64,7 @@ namespace Relais
         {
             repo = (repo ?? "").Trim().Trim('/');
             if (repo.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase)) repo = repo.Substring(19).Trim('/');
-            if (repo.Split('/').Length != 2) throw new FormatException("Dépôt invalide : écris « pseudo/depot ».");
+            if (repo.Split('/').Length != 2) throw new FormatException(L.T("Dépôt invalide : écris « pseudo/depot »."));
             Dictionary<string, object> d = null;
             try
             {
@@ -77,7 +77,7 @@ namespace Relais
                 try { Get("https://api.github.com/repos/" + repo); }
                 catch (WebException ex2)
                 {
-                    if (Is404(ex2)) throw new FriendlyException("Dépôt « " + repo + " » introuvable.\n\nVérifie l'orthographe exacte (pseudo/depot, comme dans l'adresse github.com/pseudo/depot) et que le dépôt est bien PUBLIC (Settings > General > Danger Zone > Change visibility).");
+                    if (Is404(ex2)) throw new FriendlyException(L.T("Dépôt « ") + repo + L.T(" » introuvable.\n\nVérifie l'orthographe exacte (pseudo/depot, comme dans l'adresse github.com/pseudo/depot) et que le dépôt est bien PUBLIC (Settings > General > Danger Zone > Change visibility)."));
                     throw;
                 }
                 System.Collections.ArrayList all = Settings.Json().Deserialize<System.Collections.ArrayList>(Get("https://api.github.com/repos/" + repo + "/releases?per_page=10"));
@@ -86,7 +86,7 @@ namespace Relais
                     Dictionary<string, object> r = o as Dictionary<string, object>;
                     if (r != null && !(r.ContainsKey("draft") && r["draft"] is bool && (bool)r["draft"])) { d = r; break; }
                 }
-                if (d == null) throw new FriendlyException("Le dépôt « " + repo + " » existe, mais aucune Release n'est encore publiée.\n\nSur GitHub : Releases > Draft a new release > tag « v2.0.1 » > Publish release. Le workflow y ajoutera Relais.exe quelques minutes plus tard (onglet Actions).");
+                if (d == null) throw new FriendlyException(L.T("Le dépôt « ") + repo + L.T(" » existe, mais aucune Release n'est encore publiée.\n\nSur GitHub : Releases > Draft a new release > tag « v2.0.1 » > Publish release. Le workflow y ajoutera Relais.exe quelques minutes plus tard (onglet Actions)."));
             }
             Info i = new Info();
             i.Tag = d.ContainsKey("tag_name") ? d["tag_name"] as string : null;
@@ -112,7 +112,7 @@ namespace Relais
             Settings s = app.S;
             if (string.IsNullOrEmpty(s.UpdateRepo))
             {
-                if (manual) MessageBox.Show(app.Main, "Indique d'abord ton dépôt GitHub (ex. tonpseudo/relais) dans Options > Mises à jour.", "Relais");
+                if (manual) MessageBox.Show(app.Main, L.T("Indique d'abord ton dépôt GitHub (ex. tonpseudo/relais) dans Options > Mises à jour."), "Relais");
                 return;
             }
             if (!manual && (!s.CheckUpdates || s.LastUpdateCheck == App.Today)) return;
@@ -127,8 +127,8 @@ namespace Relais
                 {
                     HttpWebResponse r = ex.Response as HttpWebResponse;
                     error = r != null && (int)r.StatusCode == 403
-                        ? "GitHub limite le nombre de vérifications (60 par heure). Réessaie un peu plus tard."
-                        : "Connexion à GitHub impossible : " + ex.Message;
+                        ? L.T("GitHub limite le nombre de vérifications (60 par heure). Réessaie un peu plus tard.")
+                        : L.T("Connexion à GitHub impossible : ") + ex.Message;
                 }
                 catch (Exception ex) { error = ex.Message; }
                 SendOrPostCallback done = delegate
@@ -138,12 +138,12 @@ namespace Relais
                     if (error != null)
                     {
                         Program.Log("Mise à jour : " + error);
-                        if (manual) MessageBox.Show(app.Main, error, "Relais — mises à jour", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        if (manual) MessageBox.Show(app.Main, error, L.T("Relais — mises à jour"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                         return;
                     }
                     if (info.Version == null || info.Version <= Current)
                     {
-                        if (manual) app.Toast.ShowMessage("Relais est à jour (v" + Current.ToString(3) + ")", false);
+                        if (manual) app.Toast.ShowMessage(L.T("Relais est à jour (v") + Current.ToString(3) + ")", false);
                         return;
                     }
                     app.AvailableUpdate = info;
@@ -157,14 +157,14 @@ namespace Relais
         {
             if (string.IsNullOrEmpty(info.ExeUrl))
             {
-                if (MessageBox.Show(app.Main, "Relais " + info.Tag + " est disponible, mais la release ne contient pas de Relais.exe.\nOuvrir la page de téléchargement ?",
-                    "Relais — mise à jour", MessageBoxButtons.YesNo) == DialogResult.Yes) try { Process.Start(info.Page); } catch { }
+                if (MessageBox.Show(app.Main, L.T("Relais ") + info.Tag + L.T(" est disponible, mais la release ne contient pas de Relais.exe.\nOuvrir la page de téléchargement ?"),
+                    L.T("Relais — mise à jour"), MessageBoxButtons.YesNo) == DialogResult.Yes) try { Process.Start(info.Page); } catch { }
                 return;
             }
             string notes = (info.Notes ?? "").Trim();
             if (notes.Length > 600) notes = notes.Substring(0, 600) + "…";
-            if (MessageBox.Show(app.Main, "Relais " + info.Tag + " est disponible (tu as la v" + Current.ToString(3) + ").\n\n" + notes + "\n\nMettre à jour maintenant ? Relais redémarrera tout seul.",
-                "Relais — mise à jour", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+            if (MessageBox.Show(app.Main, L.T("Relais ") + info.Tag + L.T(" est disponible (tu as la v") + Current.ToString(3) + ").\n\n" + notes + L.T("\n\nMettre à jour maintenant ? Relais redémarrera tout seul."),
+                L.T("Relais — mise à jour"), MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
                 Install(app, info);
         }
 
@@ -174,7 +174,7 @@ namespace Relais
             string exe = Application.ExecutablePath;
             string dir = Path.GetDirectoryName(exe);
             string tmpExe = Path.Combine(Path.GetTempPath(), "Relais.update.exe");
-            app.Toast.ShowMessage("Téléchargement de " + info.Tag + "…", false, 30);
+            app.Toast.ShowMessage(L.T("Téléchargement de ") + info.Tag + "…", false, 30);
             SynchronizationContext ui = SynchronizationContext.Current;
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -186,21 +186,21 @@ namespace Relais
                         wc.Headers["User-Agent"] = "Relais-Updater";
                         wc.DownloadFile(info.ExeUrl, tmpExe);
                     }
-                    if (new FileInfo(tmpExe).Length < 20000) throw new IOException("fichier téléchargé invalide");
+                    if (new FileInfo(tmpExe).Length < 20000) throw new IOException(L.T("fichier téléchargé invalide"));
                 }
                 catch (Exception ex) { error = ex.Message; }
                 SendOrPostCallback done = delegate
                 {
                     if (error != null)
                     {
-                        MessageBox.Show(app.Main, "Échec du téléchargement : " + error, "Relais");
+                        MessageBox.Show(app.Main, L.T("Échec du téléchargement : ") + error, "Relais");
                         return;
                     }
                     // test d'écriture dans le dossier de Relais
                     try { string probe = Path.Combine(dir, ".relais-write-test"); File.WriteAllText(probe, "x"); File.Delete(probe); }
                     catch
                     {
-                        MessageBox.Show(app.Main, "Relais n'a pas le droit d'écrire dans son dossier (" + dir + ").\nDéplace Relais dans un dossier à toi (ex. Documents) ou utilise l'installateur.", "Relais");
+                        MessageBox.Show(app.Main, L.T("Relais n'a pas le droit d'écrire dans son dossier (") + dir + L.T(").\nDéplace Relais dans un dossier à toi (ex. Documents) ou utilise l'installateur."), "Relais");
                         return;
                     }
                     int pid = Process.GetCurrentProcess().Id;

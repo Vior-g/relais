@@ -207,10 +207,16 @@ namespace Relais
 
         public static List<Target> PlanMosaic(List<GameWindow> wins, IntPtr reference)
         {
+            return PlanMosaic(wins, reference, System.Drawing.Rectangle.Empty);
+        }
+
+        /// <summary>Mosaïque sur une zone donnée (écran choisi) ou, si vide, sur l'écran de la fenêtre de référence.</summary>
+        public static List<Target> PlanMosaic(List<GameWindow> wins, IntPtr reference, System.Drawing.Rectangle area)
+        {
             List<Target> list = new List<Target>();
             int count = wins.Count;
             if (count == 0) return list;
-            System.Drawing.Rectangle wa = System.Windows.Forms.Screen.FromHandle(reference != IntPtr.Zero ? reference : wins[0].Handle).WorkingArea;
+            System.Drawing.Rectangle wa = !area.IsEmpty ? area : System.Windows.Forms.Screen.FromHandle(reference != IntPtr.Zero ? reference : wins[0].Handle).WorkingArea;
             int cols = (int)Math.Ceiling(Math.Sqrt(count));
             int rows = (int)Math.Ceiling(count / (double)cols);
             int cw = wa.Width / cols, ch = wa.Height / rows;
@@ -337,7 +343,22 @@ namespace Relais
             if (nCode >= 0)
             {
                 int msg = wParam.ToInt32();
-                if (msg == Native.WM_XBUTTONDOWN || msg == Native.WM_XBUTTONUP || msg == Native.WM_MBUTTONDOWN || msg == Native.WM_MBUTTONUP)
+                if (msg == 0x020A /*WM_MOUSEWHEEL*/)
+                {
+                    // molette : seulement avec une touche modificatrice (la molette seule reste au jeu)
+                    int mods = CurrentMods();
+                    if (mods != 0)
+                    {
+                        Native.MSLLHOOKSTRUCT m = (Native.MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(Native.MSLLHOOKSTRUCT));
+                        if ((m.flags & Native.LLMHF_INJECTED) == 0)
+                        {
+                            short delta = (short)((m.mouseData >> 16) & 0xFFFF);
+                            string key = delta > 0 ? Hotkey.WHEELUP : Hotkey.WHEELDOWN;
+                            if (Handle(new Hotkey(mods, key))) return (IntPtr)1;
+                        }
+                    }
+                }
+                else if (msg == Native.WM_XBUTTONDOWN || msg == Native.WM_XBUTTONUP || msg == Native.WM_MBUTTONDOWN || msg == Native.WM_MBUTTONUP)
                 {
                     Native.MSLLHOOKSTRUCT m = (Native.MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(Native.MSLLHOOKSTRUCT));
                     if ((m.flags & Native.LLMHF_INJECTED) == 0)

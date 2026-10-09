@@ -85,6 +85,15 @@ namespace Relais
                         g.FillRectangle(b, x + 14 * u, y + 3 * u, 3 * u, 14 * u);
                         g.DrawLine(p, x + 2 * u, y + 18.5f * u, x + 18 * u, y + 18.5f * u);
                         break;
+                    case 6: // Accueil : maison / tour de garde
+                        g.DrawLines(p, new PointF[] { new PointF(x + 2.5f * u, y + 9.5f * u), new PointF(x + 10 * u, y + 3 * u), new PointF(x + 17.5f * u, y + 9.5f * u) });
+                        g.DrawLines(p, new PointF[] { new PointF(x + 4.5f * u, y + 8 * u), new PointF(x + 4.5f * u, y + 17 * u), new PointF(x + 15.5f * u, y + 17 * u), new PointF(x + 15.5f * u, y + 8 * u) });
+                        g.DrawLines(p, new PointF[] { new PointF(x + 8.5f * u, y + 17 * u), new PointF(x + 8.5f * u, y + 12 * u), new PointF(x + 11.5f * u, y + 12 * u), new PointF(x + 11.5f * u, y + 17 * u) });
+                        break;
+                    case 7: // Action : éclair
+                        g.FillPolygon(b, new PointF[] { new PointF(x + 11.5f * u, y + 1.5f * u), new PointF(x + 4.5f * u, y + 11 * u), new PointF(x + 9.5f * u, y + 11 * u),
+                            new PointF(x + 8 * u, y + 18.5f * u), new PointF(x + 15.5f * u, y + 8.5f * u), new PointF(x + 10.5f * u, y + 8.5f * u) });
+                        break;
                     default: // Options : engrenage
                         float cx = x + 10 * u, cy = y + 10 * u;
                         for (int i = 0; i < 8; i++)
@@ -104,6 +113,7 @@ namespace Relais
     public sealed class SideNav : Control
     {
         public readonly List<string> Tabs = new List<string>();
+        public readonly List<int> Kinds = new List<int>();
         public string Footer = "";
         int selected, hover = -1;
         float indicatorY = -1, targetY;
@@ -187,7 +197,7 @@ namespace Relais
                 if (i == hover && !sel) Theme.FillRound(g, Color.FromArgb(Theme.IsLight ? 60 : 40, Theme.Hover), r, Theme.S(9));
                 Color c = sel ? Theme.Accent : (i == hover ? Theme.Text : Theme.Muted);
                 float isz = Theme.S(20);
-                Icons.Draw(g, i, new RectangleF(r.X + Theme.S(14), r.Y + (r.Height - isz) / 2f, isz, isz), c);
+                Icons.Draw(g, i < Kinds.Count ? Kinds[i] : i, new RectangleF(r.X + Theme.S(14), r.Y + (r.Height - isz) / 2f, isz, isz), c);
                 Theme.DrawText(g, Tabs[i], Theme.Nav, sel ? Theme.Text : c,
                     new Rectangle(r.X + Theme.S(46), r.Y, r.Width - Theme.S(50), r.Height), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             }

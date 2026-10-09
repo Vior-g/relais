@@ -12,6 +12,7 @@ namespace Relais
     {
         public const int CTRL = 1, ALT = 2, SHIFT = 4, WIN = 8;
         public const string MOUSE4 = "Souris4", MOUSE5 = "Souris5", MOUSEMID = "SourisMilieu";
+        public const string WHEELUP = "SourisMoletteHaut", WHEELDOWN = "SourisMoletteBas";
 
         public int Mods;
         public string Key; // nom de Keys (ex. "F1") ou MOUSE4 / MOUSE5 / MOUSEMID
@@ -54,21 +55,25 @@ namespace Relais
         public string Display()
         {
             StringBuilder sb = new StringBuilder();
-            if ((Mods & CTRL) != 0) sb.Append("Ctrl + ");
-            if ((Mods & ALT) != 0) sb.Append("Alt + ");
-            if ((Mods & SHIFT) != 0) sb.Append("Maj + ");
-            if ((Mods & WIN) != 0) sb.Append("Win + ");
+            if ((Mods & CTRL) != 0) sb.Append(L.T("Ctrl + "));
+            if ((Mods & ALT) != 0) sb.Append(L.T("Alt + "));
+            if ((Mods & SHIFT) != 0) sb.Append(L.T("Maj + "));
+            if ((Mods & WIN) != 0) sb.Append(L.T("Win + "));
             sb.Append(PrettyKey(Key));
             return sb.ToString();
         }
 
-        public static string PrettyKey(string k)
+        public static string PrettyKey(string k) { return L.T(PrettyKeyFr(k)); }
+
+        static string PrettyKeyFr(string k)
         {
             switch (k)
             {
                 case MOUSE4: return "Souris 4";
                 case MOUSE5: return "Souris 5";
                 case MOUSEMID: return "Clic molette";
+                case WHEELUP: return "Molette ↑";
+                case WHEELDOWN: return "Molette ↓";
                 case "Oemtilde": case "Oem7": return "²";
                 case "Next": return "Page suiv.";
                 case "PageUp": return "Page préc.";
@@ -86,7 +91,7 @@ namespace Relais
                 case "Left": return "Gauche";
                 case "Right": return "Droite";
             }
-            if (k.StartsWith("NumPad")) return "Pavé " + k.Substring(6);
+            if (k.StartsWith("NumPad")) return L.T("Pavé ") + k.Substring(6);
             if (k.Length == 2 && k[0] == 'D' && char.IsDigit(k[1])) return k.Substring(1);
             return k;
         }
@@ -150,6 +155,15 @@ namespace Relais
             if (Daily == null) Daily = new List<CheckItem>();
             if (Dungeons == null) Dungeons = new List<CheckItem>();
         }
+    }
+
+    /// <summary>Bilan des combats d'une journée.</summary>
+    public sealed class CombatDay
+    {
+        public int Fights { get; set; }
+        public int Turns { get; set; }
+        public double Seconds { get; set; }
+        public double Longest { get; set; }
     }
 
     public sealed class CheckItem
@@ -258,6 +272,33 @@ namespace Relais
         public int PreviewW { get; set; }
         public int PreviewH { get; set; }
 
+        // v2.2
+        public bool SoundsEnabled { get; set; }
+        public bool SoundSwitch { get; set; }
+        public bool SoundTurn { get; set; }
+        public bool SoundTimer { get; set; }
+        public bool SoundDisconnect { get; set; }
+        public int SoundVolume { get; set; }
+        public string KeyPalette { get; set; }
+        public string LastSeenVersion { get; set; }
+
+        // v2.3
+        public bool WheelCycle { get; set; }              // Alt + molette = perso suivant / précédent
+        public bool CombatTracking { get; set; }          // frise de combat, tours, durée
+        public Dictionary<string, CombatDay> Combat { get; set; } // yyyy-MM-dd -> bilan
+        public bool AlmanaxShow { get; set; }
+        public Dictionary<string, string> AlmanaxDone { get; set; } // perso -> date faite
+        public bool PhoneRemote { get; set; }
+        public int PhonePort { get; set; }
+        public string PhonePin { get; set; }
+        public string PreviewScreen { get; set; }        // écran des aperçus ("" = auto)
+        public string LayoutScreen { get; set; }         // écran de la team pour superposer/mosaïque ("" = écran actif)
+        public string GistToken { get; set; }
+        public string GistId { get; set; }
+        public string LastSync { get; set; }
+        public bool AutoSync { get; set; }
+        public string Language { get; set; }             // "fr" ou "en"
+
         public bool OnlyWhenDofusFocused { get; set; }
         public bool AutoAddNewCharacters { get; set; }
         public bool ShowBar { get; set; }
@@ -299,6 +340,16 @@ namespace Relais
             RemoteTimers = true;
             CheckUpdates = true;
             PreviewX = -1;
+            SoundsEnabled = true;
+            SoundTurn = true;
+            SoundTimer = true;
+            SoundDisconnect = true;
+            SoundVolume = 60;
+            WheelCycle = true;
+            CombatTracking = true;
+            AlmanaxShow = true;
+            PhonePort = 8754;
+            Language = "fr";
             Fix();
         }
 
@@ -321,7 +372,16 @@ namespace Relais
             if (AwayMinutes < 1) AwayMinutes = 3;
             if (OverlayCorner < 0 || OverlayCorner > 3) OverlayCorner = 0;
             if (BarOpacity < 30 || BarOpacity > 100) BarOpacity = 100;
-            if (LastTab < 0 || LastTab > 5) LastTab = 0;
+            if (LastTab < 0 || LastTab > 6) LastTab = 0;
+            if (SoundVolume < 0 || SoundVolume > 100) SoundVolume = 60;
+            if (Combat == null) Combat = new Dictionary<string, CombatDay>();
+            if (AlmanaxDone == null) AlmanaxDone = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (PhonePort < 1024 || PhonePort > 65000) PhonePort = 8754;
+            if (string.IsNullOrEmpty(PhonePin)) PhonePin = new Random().Next(100000, 999999).ToString();
+            if (Language != "en") Language = "fr";
+            if (PreviewScreen == null) PreviewScreen = "";
+            if (LayoutScreen == null) LayoutScreen = "";
+            if (string.IsNullOrEmpty(UpdateRepo)) UpdateRepo = Links.Repo;
         }
 
         static Dictionary<string, T> CI<T>(Dictionary<string, T> d)
@@ -344,7 +404,7 @@ namespace Relais
                 if (Profiles.Count == 0)
                 {
                     Profile p = new Profile();
-                    p.Name = "Ma team";
+                    p.Name = L.T("Ma team");
                     Profiles.Add(p);
                 }
                 CurrentProfile = Profiles[0].Name;
@@ -375,7 +435,7 @@ namespace Relais
                         // dictionnaires insensibles à la casse des noms de persos
                         s.CharVolume = CI(s.CharVolume); s.Notes = CI(s.Notes);
                         s.CharColors = CI(s.CharColors); s.CharImages = CI(s.CharImages);
-                        s.Sheets = CI(s.Sheets);
+                        s.Sheets = CI(s.Sheets); s.AlmanaxDone = CI(s.AlmanaxDone);
                         return s;
                     }
                 }
@@ -383,11 +443,14 @@ namespace Relais
             catch (Exception ex)
             {
                 try { File.Copy(FilePath, FilePath + ".bak", true); } catch { }
-                MessageBox.Show("Configuration illisible, une nouvelle a été créée.\n(ancienne sauvegardée en config.json.bak)\n\n" + ex.Message,
+                MessageBox.Show(L.T("Configuration illisible, une nouvelle a été créée.\n(ancienne sauvegardée en config.json.bak)\n\n") + ex.Message,
                     "Relais", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             return new Settings();
         }
+
+        /// <summary>Chaque enregistrement (sert à la synchro automatique).</summary>
+        public static event EventHandler Saved;
 
         public void Save()
         {
@@ -399,6 +462,7 @@ namespace Relais
                 File.WriteAllText(tmp, json, Encoding.UTF8);
                 if (File.Exists(FilePath)) File.Delete(FilePath);
                 File.Move(tmp, FilePath);
+                if (Saved != null) Saved(this, EventArgs.Empty);
             }
             catch { }
         }

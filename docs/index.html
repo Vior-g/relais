@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Relais — organizer multicompte gratuit pour Dofus</title>
+<meta name="description" content="Relais : l'organizer multicompte gratuit et open source pour Dofus. Une touche = une fenêtre, bascule auto quand c'est ton tour, aperçus en direct, télécommande sur téléphone, Almanax, stats de combat.">
+<meta property="og:title" content="Relais — organizer multicompte pour Dofus">
+<meta property="og:description" content="Gratuit, open source, conforme aux règles : une touche = une fenêtre.">
+<meta property="og:image" content="img/accueil.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#16110d;--bg2:#1f1812;--panel:#2a211a;--line:#4a3b2c;--text:#f1e6d2;--muted:#b9a88e;--faint:#8a7a63;--gold:#e0a43a;--gold2:#f3c76a}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 Inter,system-ui,Segoe UI,sans-serif}
+a{color:var(--gold2)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+header{position:sticky;top:0;z-index:5;background:rgba(22,17,13,.86);backdrop-filter:blur(8px);border-bottom:1px solid rgba(74,59,44,.6)}
+header .wrap{display:flex;align-items:center;gap:12px;height:62px}
+.logo{display:flex;align-items:center;gap:10px;font:700 22px Cinzel,Georgia,serif;color:var(--text);text-decoration:none}
+nav{margin-left:auto;display:flex;gap:18px;font-size:14px}
+nav a{color:var(--muted);text-decoration:none}nav a:hover{color:var(--text)}
+.hero{padding:72px 0 40px;background:radial-gradient(900px 400px at 70% 0%,rgba(224,164,58,.14),transparent 70%)}
+.hero .wrap{display:grid;grid-template-columns:1.05fr 1fr;gap:40px;align-items:center}
+h1{font:700 44px/1.15 Cinzel,Georgia,serif;margin:0 0 16px}
+h1 span{color:var(--gold)}
+.lead{color:var(--muted);font-size:18px;margin:0 0 26px}
+.btns{display:flex;flex-wrap:wrap;gap:12px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:13px 22px;border-radius:10px;font-weight:600;text-decoration:none;border:1px solid var(--line);color:var(--text);background:var(--panel)}
+.btn.gold{background:linear-gradient(180deg,var(--gold2),#c98a26);color:#2a1d0c;border-color:#a8701c}
+.btn:hover{filter:brightness(1.08)}
+.small{font-size:13px;color:var(--faint);margin-top:12px}
+.shot{border-radius:14px;border:1px solid var(--line);box-shadow:0 30px 80px rgba(0,0,0,.55);width:100%;display:block}
+.bar{margin-top:18px;border-radius:40px;max-width:100%}
+section{padding:56px 0}
+h2{font:700 30px Cinzel,Georgia,serif;margin:0 0 8px}
+.sub{color:var(--muted);margin:0 0 30px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.card{background:linear-gradient(180deg,#2c231b,#221a14);border:1px solid var(--line);border-radius:14px;padding:20px}
+.card h3{margin:0 0 6px;font-size:17px}
+.card p{margin:0;color:var(--muted);font-size:14.5px}
+.ic{width:34px;height:34px;border-radius:9px;background:rgba(224,164,58,.16);color:var(--gold);display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:18px}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center}
+.split.rev .txt{order:2}
+ul.ticks{list-style:none;padding:0;margin:0}
+ul.ticks li{padding-left:26px;position:relative;margin:8px 0;color:var(--muted)}
+ul.ticks li:before{content:"◆";position:absolute;left:4px;color:var(--gold);font-size:11px;top:4px}
+.phone{max-width:280px;margin:0 auto;display:block;border-radius:28px;border:6px solid #0d0a08;box-shadow:0 30px 80px rgba(0,0,0,.55)}
+.rules{background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.steps{counter-reset:s;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.steps .card:before{counter-increment:s;content:counter(s);display:flex;width:30px;height:30px;border-radius:50%;background:var(--gold);color:#2a1d0c;font-weight:700;align-items:center;justify-content:center;margin-bottom:10px}
+.support{text-align:center;padding:64px 0;background:radial-gradient(700px 300px at 50% 100%,rgba(224,164,58,.14),transparent 70%)}
+footer{border-top:1px solid var(--line);padding:26px 0;color:var(--faint);font-size:13px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between}
+@media (max-width:860px){
+  .hero .wrap,.split{grid-template-columns:1fr}
+  .split.rev .txt{order:0}
+  .grid,.steps{grid-template-columns:1fr}
+  h1{font-size:34px}
+  nav{display:none}
+}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <a class="logo" href="#"><svg width="30" height="32" viewBox="0 0 30 32" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3c76a"/><stop offset="1" stop-color="#b9781e"/></linearGradient></defs><path d="M15 1 L28 5 V15 C28 23 22 28 15 31 C8 28 2 23 2 15 V5 Z" fill="#2a211a" stroke="url(#g)" stroke-width="2.2"/><path d="M9 10 l5 6 -5 6 M15 10 l5 6 -5 6" fill="none" stroke="url(#g)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Relais</a>
+  <nav><a href="#fonctions">Fonctions</a><a href="#telephone">Téléphone</a><a href="#regles">Règles</a><a href="#installer">Installer</a><a href="#soutenir">Soutenir</a></nav>
+</div></header>
+
+<div class="hero"><div class="wrap">
+  <div>
+    <h1>L'organizer multicompte <span>pensé pour Dofus</span></h1>
+    <p class="lead">Une touche = une fenêtre. Relais bascule sur le bon perso quand c'est son tour, range tes fenêtres, suit tes combats et ton Almanax. Gratuit, open source, et conforme aux règles d'Ankama.</p>
+    <div class="btns">
+      <a class="btn gold" id="dl" href="https://github.com/Vior-g/relais/releases/latest/download/Relais-Setup.exe">⬇ Télécharger pour Windows</a>
+      <a class="btn" href="https://github.com/Vior-g/relais/releases/latest">Version portable &amp; notes</a>
+    </div>
+    <p class="small">Windows 10 / 11 · .NET Framework 4.8 (déjà présent sur Windows) · Mises à jour automatiques</p>
+    <img class="bar" src="img/barre.png" alt="La mini-barre de Relais avec quatre personnages">
+  </div>
+  <img class="shot" src="img/accueil.png" alt="Accueil de Relais : la team, les actions rapides et l'Almanax">
+</div></div>
+
+<section id="fonctions"><div class="wrap">
+  <h2>Tout ce qu'il faut pour jouer à plusieurs comptes</h2>
+  <p class="sub">Et rien de plus côté jeu : Relais ne fait que passer d'une fenêtre à l'autre.</p>
+  <div class="grid">
+    <div class="card"><div class="ic">⌨</div><h3>Une touche par perso</h3><p>F1, F2, boutons de souris, Alt + molette… Bascule instantanée, ordre d'initiative par glisser-déposer.</p></div>
+    <div class="card"><div class="ic">⚔</div><h3>Tour automatique</h3><p>Quand la fenêtre d'un perso clignote, Relais t'y emmène. La mini-barre affiche le tour et le chrono du combat.</p></div>
+    <div class="card"><div class="ic">▦</div><h3>Superposer &amp; mosaïque</h3><p>Toutes les fenêtres au même endroit pour parler aux PNJ, ou en grille sur l'écran de ton choix.</p></div>
+    <div class="card"><div class="ic">◉</div><h3>Aperçus en direct</h3><p>Tous tes comptes en miniature, en direct — parfait sur un deuxième écran.</p></div>
+    <div class="card"><div class="ic">⌘</div><h3>Palette Ctrl+K</h3><p>Tape « kae », « mosa » ou « 30 min » puis Entrée : tout se fait au clavier.</p></div>
+    <div class="card"><div class="ic">☀</div><h3>Almanax &amp; minuteurs</h3><p>L'offrande du jour avec une case par perso, minuteurs d'enclos et de récolte, rappels quotidiens.</p></div>
+    <div class="card"><div class="ic">⚒</div><h3>Carnet de craft</h3><p>Recettes DofusDB, ingrédients répartis entre tes persos, fiches de perso avec objectifs et donjons.</p></div>
+    <div class="card"><div class="ic">📈</div><h3>Stats de jeu</h3><p>Temps de jeu par perso, combats, graphiques sur 7 jours à 1 an. Tout reste sur ton PC.</p></div>
+    <div class="card"><div class="ic">☁</div><h3>Partage &amp; sauvegarde</h3><p>Codes de team à partager, sauvegarde de tes réglages sur ton compte GitHub, thème clair, français ou anglais.</p></div>
+  </div>
+</div></section>
+
+<section><div class="wrap split">
+  <div class="txt">
+    <h2>Une palette pour tout faire</h2>
+    <p class="sub">Ctrl+K, quelques lettres, Entrée. Même en jeu, avec le raccourci de ton choix.</p>
+    <ul class="ticks">
+      <li>Aller sur un perso, couper son son, ouvrir sa fiche</li>
+      <li>Superposer, mosaïque, aperçus, invitations</li>
+      <li>Lancer un minuteur : « 45 min », « 2h »</li>
+      <li>Changer de profil ou de réglage en un instant</li>
+    </ul>
+  </div>
+  <img class="shot" src="img/palette.png" alt="La palette de commandes de Relais">
+</div></section>
+
+<section id="telephone"><div class="wrap split rev">
+  <div class="txt">
+    <h2>Ton téléphone devient une télécommande</h2>
+    <p class="sub">Scanne le QR code affiché dans Relais : ta team apparaît sur ton téléphone.</p>
+    <ul class="ticks">
+      <li>Un appui = une bascule de fenêtre sur le PC</li>
+      <li>Le perso dont c'est le tour clignote</li>
+      <li>Combat en cours, pause, superposer, mosaïque</li>
+      <li>Protégé par un code, sur ton Wi-Fi uniquement</li>
+      <li>Alertes Discord ou ntfy quand tu es loin du PC</li>
+    </ul>
+  </div>
+  <img class="phone" src="img/telephone.png" alt="La télécommande de Relais sur un téléphone">
+</div></section>
+
+<section><div class="wrap split">
+  <div class="txt">
+    <h2>Suis tes combats et ton temps de jeu</h2>
+    <p class="sub">Relais repère les combats grâce aux alertes de tour, sans rien lire dans le jeu.</p>
+    <ul class="ticks">
+      <li>Nombre de combats, durée moyenne, tours</li>
+      <li>Temps de jeu par jour, semaine ou mois</li>
+      <li>Perso le plus joué, temps au premier plan</li>
+    </ul>
+  </div>
+  <img class="shot" src="img/stats.png" alt="Les statistiques de Relais">
+</div></section>
+
+<section id="regles" class="rules"><div class="wrap">
+  <h2>Conforme aux règles d'Ankama</h2>
+  <p class="sub">Relais respecte la règle « une action physique = une action sur un seul compte » : il ne fait que changer de fenêtre.</p>
+  <div class="grid">
+    <div class="card"><h3>✓ Ce que fait Relais</h3><p>Mettre une fenêtre Dofus au premier plan, la déplacer ou la redimensionner, afficher des infos par-dessus sans intercepter tes clics.</p></div>
+    <div class="card"><h3>✗ Ce qu'il ne fera jamais</h3><p>Envoyer un clic ou une touche au jeu, répéter une action sur plusieurs comptes, lire la mémoire ou le réseau du jeu.</p></div>
+    <div class="card"><h3>Une action = un compte</h3><p>Chaque action en jeu, c'est toi qui la fais, compte par compte. Relais te fait juste gagner le temps de chercher la bonne fenêtre.</p></div>
+  </div>
+</div></section>
+
+<section id="installer"><div class="wrap">
+  <h2>Installer en 1 minute</h2>
+  <p class="sub">Aucun compte, aucune publicité, aucune donnée envoyée.</p>
+  <div class="steps">
+    <div class="card"><h3>Télécharge</h3><p><a href="https://github.com/Vior-g/relais/releases/latest/download/Relais-Setup.exe">Relais-Setup.exe</a> (installateur) ou <a href="https://github.com/Vior-g/relais/releases/latest/download/Relais.exe">Relais.exe</a> (portable, sans installation).</p></div>
+    <div class="card"><h3>Lance</h3><p>Windows peut afficher « Windows a protégé votre PC » : clique sur « Informations complémentaires » puis « Exécuter quand même ». Le code source est public.</p></div>
+    <div class="card"><h3>Joue</h3><p>Connecte tes comptes : ils apparaissent tout seuls. Un petit assistant règle les raccourcis avec toi.</p></div>
+  </div>
+</div></section>
+
+<section id="soutenir" class="support"><div class="wrap">
+  <h2>Relais est gratuit, et le restera</h2>
+  <p class="sub">S'il t'aide au quotidien, tu peux soutenir le projet — ou simplement en parler à ta guilde.</p>
+  <div class="btns" style="justify-content:center">
+    <a class="btn gold" id="support" href="https://github.com/Vior-g/relais">♥ Soutenir Relais</a>
+    <a class="btn" href="https://github.com/Vior-g/relais">★ Mettre une étoile sur GitHub</a>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <span>Relais — projet de fan, non affilié à Ankama. Dofus est une marque d'Ankama.</span>
+  <span><a href="https://github.com/Vior-g/relais">Code source</a> · <a href="https://github.com/Vior-g/relais/issues">Signaler un problème</a></span>
+</div></footer>
+
+<script>
+// Lien de soutien : remplace par ta page Ko-fi / Tipeee / GitHub Sponsors.
+var SUPPORT_URL = "";
+if (SUPPORT_URL) document.getElementById("support").href = SUPPORT_URL;
+</script>
+</body>
+</html>

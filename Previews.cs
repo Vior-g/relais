@@ -107,7 +107,7 @@ namespace Relais
         public PreviewForm(App app)
         {
             this.app = app;
-            Text = "Relais — aperçus en direct";
+            Text = L.T("Relais — aperçus en direct");
             Chrome.Hook(this);
             Icon = app.AppIcon;
             BackColor = Theme.Bg;
@@ -116,7 +116,13 @@ namespace Relais
             DoubleBuffered = true;
             StartPosition = FormStartPosition.Manual;
             MinimumSize = new Size(Theme.S(360), Theme.S(240));
-            if (app.S.PreviewX >= 0 && app.S.PreviewW > 200)
+            Screen chosen = App.ScreenByName(app.S.PreviewScreen);
+            if (chosen != null)
+            {
+                // écran dédié choisi dans les options : les aperçus le remplissent
+                Bounds = chosen.WorkingArea;
+            }
+            else if (app.S.PreviewX >= 0 && app.S.PreviewW > 200)
                 Bounds = new Rectangle(app.S.PreviewX, app.S.PreviewY, app.S.PreviewW, app.S.PreviewH);
             else
             {
@@ -199,7 +205,7 @@ namespace Relais
             g.Clear(Theme.Bg);
             if (items.Count == 0)
             {
-                Theme.DrawText(g, "Aucun perso connecté dans la rotation.", Theme.Normal, Theme.Muted, ClientRectangle,
+                Theme.DrawText(g, L.T("Aucun perso connecté dans la rotation."), Theme.Normal, Theme.Muted, ClientRectangle,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 return;
             }
@@ -218,11 +224,11 @@ namespace Relais
                 if (border != Color.Empty) Theme.StrokeRound(g, border, Theme.S(2), new RectangleF(c.X + 1, c.Y + 1, c.Width - 2, c.Height - 2), Theme.S(10));
                 int av = Theme.S(20);
                 Theme.Avatar(g, new RectangleF(c.X + Theme.S(8), c.Y + Theme.S(5), av, av), w.Name, w.Class, false);
-                string title = (i + 1) + ". " + w.Name + (w.Class.Length > 0 ? " · " + w.Class : "") + (flashing ? "  — à toi de jouer !" : "");
+                string title = (i + 1) + ". " + w.Name + (w.Class.Length > 0 ? " · " + w.Class : "") + (flashing ? L.T("  — à toi de jouer !") : "");
                 Theme.DrawText(g, title, Theme.Bold, flashing ? Theme.Accent : Theme.Text,
                     new Rectangle(c.X + Theme.S(34), c.Y + Theme.S(3), c.Width - Theme.S(40), Theme.S(24)), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
                 if (Native.IsIconic(w.Handle))
-                    Theme.DrawText(g, "Fenêtre réduite", Theme.Small, Theme.Faint, box, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                    Theme.DrawText(g, L.T("Fenêtre réduite"), Theme.Small, Theme.Faint, box, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
         }
 

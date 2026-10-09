@@ -123,16 +123,16 @@ namespace Relais
             ThreadPool.QueueUserWorkItem(delegate
             {
                 StringBuilder r = new StringBuilder();
-                if (string.IsNullOrEmpty(discord) && string.IsNullOrEmpty(ntfy)) r.Append("Renseigne un webhook Discord ou un sujet ntfy.");
+                if (string.IsNullOrEmpty(discord) && string.IsNullOrEmpty(ntfy)) r.Append(L.T("Renseigne un webhook Discord ou un sujet ntfy."));
                 if (!string.IsNullOrEmpty(discord))
                 {
-                    try { PostDiscord(discord, "Relais", "Test réussi : les alertes arriveront ici."); r.Append("Discord : OK. "); }
-                    catch (Exception ex) { r.Append("Discord : échec (" + ex.Message + "). "); }
+                    try { PostDiscord(discord, "Relais", L.T("Test réussi : les alertes arriveront ici.")); r.Append(L.T("Discord : OK. ")); }
+                    catch (Exception ex) { r.Append(L.T("Discord : échec (") + ex.Message + "). "); }
                 }
                 if (!string.IsNullOrEmpty(ntfy))
                 {
-                    try { PostNtfy(ntfy, "Relais", "Test réussi : les alertes arriveront ici."); r.Append("ntfy : OK."); }
-                    catch (Exception ex) { r.Append("ntfy : échec (" + ex.Message + ")."); }
+                    try { PostNtfy(ntfy, "Relais", L.T("Test réussi : les alertes arriveront ici.")); r.Append(L.T("ntfy : OK.")); }
+                    catch (Exception ex) { r.Append(L.T("ntfy : échec (") + ex.Message + ")."); }
                 }
                 string msg = r.ToString();
                 if (ui != null) ui.Post(delegate { done(msg); }, null); else done(msg);

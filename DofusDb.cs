@@ -22,7 +22,7 @@ namespace Relais
             public int Id;
             public string Name;
             public int Level;
-            public override string ToString() { return Name + (Level > 0 ? "  (niv. " + Level + ")" : ""); }
+            public override string ToString() { return Name + (Level > 0 ? L.T("  (niv. ") + Level + ")" : ""); }
         }
 
         public sealed class Ingredient
@@ -60,6 +60,7 @@ namespace Relais
             Dictionary<string, object> d = nameObj as Dictionary<string, object>;
             if (d == null) return nameObj as string;
             object v;
+            if (d.TryGetValue(L.En ? "en" : "fr", out v) && v is string) return (string)v;
             if (d.TryGetValue("fr", out v) && v is string) return (string)v;
             foreach (object o in d.Values) if (o is string) return (string)o;
             return null;
@@ -93,7 +94,7 @@ namespace Relais
             it.Id = Int(d, "id");
             object n;
             it.Name = d.TryGetValue("name", out n) ? Fr(n) : null;
-            if (string.IsNullOrEmpty(it.Name)) it.Name = "Objet " + it.Id;
+            if (string.IsNullOrEmpty(it.Name)) it.Name = L.T("Objet ") + it.Id;
             it.Level = Int(d, "level");
             return it;
         }
@@ -170,7 +171,7 @@ namespace Relais
                 g.Id = ids[i];
                 g.Qty = i < qty.Count ? qty[i] : 1;
                 string nm;
-                g.Name = names.TryGetValue(g.Id, out nm) ? nm : "Objet " + g.Id;
+                g.Name = names.TryGetValue(g.Id, out nm) ? nm : L.T("Objet ") + g.Id;
                 list.Add(g);
             }
             return list;

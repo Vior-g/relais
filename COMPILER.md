@@ -72,7 +72,38 @@ dans Inno Setup et clique *Compile*.
 ## Antivirus / « Windows a protégé votre ordinateur »
 
 Relais écoute le clavier pour tes raccourcis : certains antivirus se méfient des programmes non signés qui font ça.
-- Construire via GitHub Actions (méthode 2) donne un exe propre et traçable (le code source est public).
-- Pour supprimer l'avertissement SmartScreen, il faut **signer** l'exe avec un certificat de signature de code
-  (payant chez les autorités classiques ; gratuit pour l'open source via **SignPath Foundation**).
-  On pourra l'ajouter au workflow le jour où tu en as un.
+Trois actions, de la plus rapide à la plus efficace :
+
+1. **Signaler le faux positif à Microsoft (gratuit, 5 min par version)**
+   - Va sur https://www.microsoft.com/wdsi/filesubmission → « Software developer ».
+   - Envoie `Relais.exe` (et `Relais-Setup.exe`), choisis « Incorrectly detected as malware/malicious ».
+   - Explique : « Organizer open source pour Dofus, code public sur github.com/Vior-g/relais ».
+   - Microsoft répond en général sous quelques jours ; Defender cesse alors de bloquer cette version.
+   - Même chose possible chez ton antivirus (Avast, Kaspersky, Norton… ont tous un formulaire « faux positif »).
+2. **Toujours publier via GitHub Actions** : l'exe est compilé à partir du code public, ce qui rassure
+   les joueurs (et les antivirus qui regardent la réputation du fichier).
+3. **Signer l'exe (supprime l'écran SmartScreen)**
+   - Gratuit pour les projets open source : **SignPath Foundation** (https://signpath.org).
+   - Conditions : dépôt public, licence open source (ajoute un fichier `LICENSE`, par ex. MIT),
+     builds faits par GitHub Actions, et une petite page qui présente le projet (la page GitHub Pages ci-dessous).
+   - Une fois accepté, SignPath te donne une étape à ajouter au workflow : envoie-moi leurs instructions et je l'intègre.
+
+## Page de présentation (GitHub Pages)
+
+Le dossier `docs/` contient le site de Relais (une seule page + captures d'écran).
+
+1. Copie le dossier `docs` à la racine de ton dépôt, commit, push.
+2. Sur github.com : ton dépôt > **Settings > Pages** > Source « Deploy from a branch » >
+   Branch `main`, dossier `/docs` > Save.
+3. Une minute plus tard, le site est en ligne sur **https://vior-g.github.io/relais/**
+   (le bouton « Page de Relais » dans Options y mène).
+
+## Bouton « Soutenir »
+
+1. Crée une page de dons (au choix) : **Ko-fi** (ko-fi.com, gratuit, 0 % de commission sur les dons),
+   **Tipeee** (tipeee.com, très utilisé en France) ou **GitHub Sponsors** (github.com/sponsors).
+2. Mets l'adresse à deux endroits :
+   - `Links.cs` : `public const string Support = "https://ko-fi.com/tonpseudo";`
+   - `docs/index.html` : tout en bas, `var SUPPORT_URL = "https://ko-fi.com/tonpseudo";`
+3. Publie une nouvelle version : le bouton « Soutenir Relais » (Options et palette) ouvrira ta page.
+   Tant que l'adresse est vide, il ouvre la page GitHub du projet (pour une étoile).

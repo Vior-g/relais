@@ -398,8 +398,8 @@ namespace Relais
             if (capturing) Theme.StrokeRound(g, Theme.Accent, 1.2f, r, Theme.S(6));
             string t;
             Color c;
-            if (capturing) { t = "Appuie sur une touche…"; c = Theme.Accent; }
-            else if (string.IsNullOrEmpty(value)) { t = "Aucun"; c = Theme.Faint; }
+            if (capturing) { t = L.T("Appuie sur une touche…"); c = Theme.Accent; }
+            else if (string.IsNullOrEmpty(value)) { t = L.T("Aucun"); c = Theme.Faint; }
             else { Hotkey hk = Hotkey.Parse(value); t = hk == null ? value : hk.Display(); c = Theme.Text; }
             Theme.DrawText(g, t, capturing ? Theme.Small : Theme.Bold, c, ClientRectangle,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
@@ -432,10 +432,10 @@ namespace Relais
                 ph.Text = placeholder; ph.ForeColor = Theme.Faint; ph.Font = Theme.Small; ph.AutoSize = false;
                 ph.Anchor = AnchorStyles.Left | AnchorStyles.Bottom | AnchorStyles.Right;
                 ph.SetBounds(Theme.S(14), Theme.S(250), Theme.S(180), Theme.S(36));
-                FlatButton ok = new FlatButton("Enregistrer"); ok.Primary = true;
+                FlatButton ok = new FlatButton(L.T("Enregistrer")); ok.Primary = true;
                 ok.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
                 ok.SetBounds(Theme.S(306), Theme.S(252), Theme.S(100), Theme.S(32));
-                FlatButton cancel = new FlatButton("Annuler");
+                FlatButton cancel = new FlatButton(L.T("Annuler"));
                 cancel.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
                 cancel.SetBounds(Theme.S(198), Theme.S(252), Theme.S(100), Theme.S(32));
                 ok.Click += delegate { f.DialogResult = DialogResult.OK; };
@@ -465,9 +465,9 @@ namespace Relais
                 tb.Text = initial ?? ""; tb.BorderStyle = BorderStyle.FixedSingle;
                 tb.BackColor = Theme.Panel2; tb.ForeColor = Theme.Text;
                 tb.SetBounds(Theme.S(16), Theme.S(36), Theme.S(308), Theme.S(26));
-                FlatButton ok = new FlatButton("Valider"); ok.Primary = true;
+                FlatButton ok = new FlatButton(L.T("Valider")); ok.Primary = true;
                 ok.SetBounds(Theme.S(224), Theme.S(84), Theme.S(100), Theme.S(32));
-                FlatButton cancel = new FlatButton("Annuler");
+                FlatButton cancel = new FlatButton(L.T("Annuler"));
                 cancel.SetBounds(Theme.S(116), Theme.S(84), Theme.S(100), Theme.S(32));
                 ok.Click += delegate { f.DialogResult = DialogResult.OK; };
                 cancel.Click += delegate { f.DialogResult = DialogResult.Cancel; };
@@ -696,6 +696,181 @@ namespace Relais
                 using (LinearGradientBrush lb = new LinearGradientBrush(new RectangleF(x0, y - 1, x1 - x0, 2), Color.FromArgb(150, Theme.Border), Color.FromArgb(0, Theme.Border), 0f))
                     g.FillRectangle(lb, x0, y - 0.5f, x1 - x0, 1f);
             }
+        }
+    }
+
+    /// <summary>Menus contextuels aux couleurs de Relais (bois, parchemin, or).</summary>
+    public sealed class WoodColors : ProfessionalColorTable
+    {
+        public override Color ToolStripDropDownBackground { get { return Theme.Panel; } }
+        public override Color ImageMarginGradientBegin { get { return Theme.Panel; } }
+        public override Color ImageMarginGradientMiddle { get { return Theme.Panel; } }
+        public override Color ImageMarginGradientEnd { get { return Theme.Panel; } }
+        public override Color MenuBorder { get { return Color.FromArgb(160, Theme.Accent); } }
+        public override Color MenuItemBorder { get { return Theme.AccentDim; } }
+        public override Color MenuItemSelected { get { return Theme.Hover; } }
+        public override Color MenuItemSelectedGradientBegin { get { return Theme.Hover; } }
+        public override Color MenuItemSelectedGradientEnd { get { return Theme.Hover; } }
+        public override Color MenuItemPressedGradientBegin { get { return Theme.Panel2; } }
+        public override Color MenuItemPressedGradientEnd { get { return Theme.Panel2; } }
+        public override Color SeparatorDark { get { return Theme.Border; } }
+        public override Color SeparatorLight { get { return Theme.Panel; } }
+        public override Color CheckBackground { get { return Theme.AccentDim; } }
+        public override Color CheckSelectedBackground { get { return Theme.AccentDim; } }
+        public override Color CheckPressedBackground { get { return Theme.AccentDim; } }
+        public override Color ToolStripBorder { get { return Theme.Border; } }
+    }
+
+    public sealed class WoodRenderer : ToolStripProfessionalRenderer
+    {
+        public WoodRenderer() : base(new WoodColors()) { RoundedEdges = false; }
+
+        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+        {
+            e.TextColor = e.Item.Enabled ? (e.Item.Selected ? Theme.Accent : Theme.Text) : Theme.Faint;
+            e.TextFont = Theme.Normal;
+            base.OnRenderItemText(e);
+        }
+
+        protected override void OnRenderImageMargin(ToolStripRenderEventArgs e)
+        {
+            using (SolidBrush b = new SolidBrush(Theme.Panel)) e.Graphics.FillRectangle(b, e.AffectedBounds);
+        }
+
+        protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+        {
+            if (e.ToolStrip is ToolStripDropDown)
+            {
+                using (SolidBrush b = new SolidBrush(Theme.Panel)) e.Graphics.FillRectangle(b, e.AffectedBounds);
+                return;
+            }
+            base.OnRenderToolStripBackground(e);
+        }
+
+        protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
+        {
+            e.ArrowColor = Theme.Muted;
+            base.OnRenderArrow(e);
+        }
+
+        protected override void OnRenderItemCheck(ToolStripItemImageRenderEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            Theme.Hq(g);
+            Rectangle r = e.ImageRectangle;
+            Brand.Diamond(g, Theme.Accent, r.X + r.Width / 2f, r.Y + r.Height / 2f, Theme.S(4));
+        }
+    }
+
+    /// <summary>Liste déroulante sur-mesure (remplace la ComboBox Windows).</summary>
+    public sealed class DropButton : Control
+    {
+        public readonly List<string> Items = new List<string>();
+        int index = -1;
+        bool hover, open;
+        public event EventHandler SelectedIndexChanged;
+
+        public DropButton()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint |
+                     ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent;
+            Font = Theme.Bold;
+            Cursor = Cursors.Hand;
+            Height = Theme.S(32);
+        }
+
+        public int SelectedIndex
+        {
+            get { return index; }
+            set
+            {
+                int v = value < -1 || value >= Items.Count ? -1 : value;
+                if (v == index) return;
+                index = v; Invalidate();
+                if (SelectedIndexChanged != null) SelectedIndexChanged(this, EventArgs.Empty);
+            }
+        }
+
+        public object SelectedItem
+        {
+            get { return index >= 0 && index < Items.Count ? Items[index] : null; }
+            set { SelectedIndex = value == null ? -1 : Items.IndexOf(value as string); }
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            if (e.Button != MouseButtons.Left || Items.Count == 0) return;
+            ContextMenuStrip cm = new ContextMenuStrip();
+            cm.MinimumSize = new Size(Width, 0);
+            for (int i = 0; i < Items.Count; i++)
+            {
+                int k = i;
+                ToolStripMenuItem it = new ToolStripMenuItem(Items[i], null, delegate { SelectedIndex = k; });
+                it.Checked = i == index;
+                cm.Items.Add(it);
+            }
+            open = true; Invalidate();
+            cm.Closed += delegate { open = false; Invalidate(); };
+            cm.Show(this, new Point(0, Height + 2));
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            Theme.Hq(g);
+            RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
+            Theme.FillRound(g, hover || open ? Theme.Hover : Theme.Panel2, r, Theme.S(7));
+            Theme.StrokeRound(g, open ? Theme.Accent : Color.FromArgb(hover ? 200 : 110, Theme.Border), 1f, r, Theme.S(7));
+            string t = SelectedItem as string ?? "—";
+            Theme.DrawText(g, t, Font, Theme.Text, new Rectangle(Theme.S(12), 0, Width - Theme.S(40), Height), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            float cx = Width - Theme.S(18), cy = Height / 2f + (open ? -1 : 1), k = Theme.S(4);
+            using (Pen p = new Pen(open ? Theme.Accent : Theme.Muted, 1.6f))
+            {
+                p.StartCap = System.Drawing.Drawing2D.LineCap.Round; p.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                if (open) g.DrawLines(p, new PointF[] { new PointF(cx - k, cy + k / 2), new PointF(cx, cy - k / 2), new PointF(cx + k, cy + k / 2) });
+                else g.DrawLines(p, new PointF[] { new PointF(cx - k, cy - k / 2), new PointF(cx, cy + k / 2), new PointF(cx + k, cy - k / 2) });
+            }
+        }
+    }
+
+    /// <summary>Cadre arrondi autour d'un champ de saisie (bordure dorée quand il a le focus).</summary>
+    public sealed class InputFrame : Panel
+    {
+        public readonly TextBox Box;
+
+        public InputFrame(TextBox tb)
+        {
+            Box = tb;
+            tb.BorderStyle = BorderStyle.None;
+            tb.BackColor = Theme.Panel2;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+            Controls.Add(tb);
+            tb.GotFocus += delegate { Invalidate(); };
+            tb.LostFocus += delegate { Invalidate(); };
+            Cursor = Cursors.IBeam;
+            Click += delegate { tb.Focus(); };
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            int h = Box.PreferredHeight;
+            Box.SetBounds(Theme.S(10), Math.Max(0, (Height - h) / 2), Math.Max(10, Width - Theme.S(20)), h);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.Clear(Parent != null ? Parent.BackColor : Theme.Bg);
+            Theme.Hq(g);
+            RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
+            Theme.FillRound(g, Theme.Panel2, r, Theme.S(7));
+            Theme.StrokeRound(g, Box.Focused ? Theme.Accent : Color.FromArgb(130, Theme.Border), Box.Focused ? 1.4f : 1f, r, Theme.S(7));
         }
     }
 }
