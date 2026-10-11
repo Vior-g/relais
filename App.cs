@@ -32,6 +32,8 @@ namespace Relais
         public CombatTracker Combat;
         public SynchronizationContext Ui { get { return ui; } }
         public PhoneServer Phone;
+        public PerfMonitor Perf;
+        public event EventHandler PerfChanged;
         /// <summary>Vrai après une restauration cloud : la config sur disque ne doit pas être écrasée.</summary>
         public bool SkipSaveOnExit;
         bool syncDirty = true;
@@ -171,6 +173,9 @@ namespace Relais
             Hover = new HoverPreview();
             Overlays = new OverlayManager(this);
             if (S.PhoneRemote) SetPhone(true);
+            Perf = new PerfMonitor(this);
+            Perf.Updated += delegate { if (Main.Visible && PerfChanged != null) PerfChanged(this, EventArgs.Empty); };
+            BackupDaily();
             Settings.Saved += delegate { syncDirty = true; };
             if (S.ShowBar) Bar.ShowBar();
             if (!S.StartMinimized && !Program.StartHidden) ShowMain();
@@ -228,7 +233,16 @@ namespace Relais
             l.Add(C(L.T("Action"), 7, L.T("Superposer les fenêtres"), L.T("Toutes à la place de la fenêtre active"), delegate { StackWindows(); }));
             l.Add(C(L.T("Action"), 7, L.T("Mosaïque"), L.T("Répartir les fenêtres en grille"), delegate { MosaicWindows(); }));
             l.Add(C(L.T("Action"), 7, L.T("Aperçus en direct"), L.T("Tous tes comptes en miniature"), delegate { TogglePreviewWall(); }));
-            l.Add(C(L.T("Action"), 7, L.T("Inviter la team"), L.T("Copie le prochain « /invite »"), delegate { InviteNext(); }));
+            l.Add(C(L.T("Action"), 7, L.T("Inviter la team"), S.InviteGrouped ? L.T("Toutes les invitations en une ligne, sur le chef") : L.T("Copie le prochain « /invite »"), delegate { InviteNext(); }));
+            if (S.InviteGrouped) l[l.Count - 1].KeepFocus = true;
+            l.Add(C(L.T("Action"), 7, L.T("Aller au perso qui attend"), L.T("Celui dont la fenêtre clignote"), delegate { GoWaiting(); }));
+            l[l.Count - 1].KeepFocus = true;
+            foreach (Macro mc in S.Macros)
+            {
+                Macro m2 = mc;
+                l.Add(C(L.T("Commande"), 7, L.T(mc.Name), Macros.Preview(this, mc), delegate { RunMacro(m2); }));
+                if (mc.SwitchToLeader) l[l.Count - 1].KeepFocus = true;
+            }
             l.Add(C(L.T("Action"), 7, L.T("Restaurer la disposition"), L.T("Fenêtres du profil à leur place"), delegate { ApplyLayout(false); }));
             l.Add(C(L.T("Action"), 7, L.T("Enregistrer la disposition"), L.T("Mémorise la place de chaque fenêtre"), delegate { SaveLayout(); }));
             l.Add(C(L.T("Action"), 7, L.T("Chef de team"), L.T("Aller sur le perso n°1"), delegate { Leader(); }));
@@ -673,6 +687,7 @@ namespace Relais
         /// <summary>Copie l'invitation du perso suivant de la team (le chef invite les autres).</summary>
         public void InviteNext()
         {
+            if (S.InviteGrouped) { InviteAll(); return; }
             List<GameWindow> rot = Rotation();
             if (rot.Count < 2) { Toast.ShowMessage(L.T("Il faut au moins 2 persos connectés"), false); return; }
             int n = rot.Count - 1;
@@ -682,6 +697,92 @@ namespace Relais
             if (CopyText(L.T("/invite ") + name))
                 Toast.ShowMessage(L.T("Copié : /invite ") + name + " (" + (inviteIndex + 1) + "/" + n + L.T(") — colle dans le chat de ") + rot[0].Name, false, 4);
             inviteIndex++;
+        }
+
+        /// <summary>
+        /// Dofus 3.7+ : toutes les invitations sur une ligne (« /invite B;/invite C;/invite D »).
+        /// Relais va sur le chef et copie le texte : tu n'as plus qu'à coller (Ctrl+V) et valider.
+        /// </summary>
+        public void InviteAll()
+        {
+            List<GameWindow> rot = Rotation();
+            if (rot.Count < 2) { Toast.ShowMessage(L.T("Il faut au moins 2 persos connectés"), false); return; }
+            List<string> cmds = new List<string>();
+            for (int i = 1; i < rot.Count; i++) cmds.Add("/invite " + rot[i].Name);
+            if (S.InviteGoLeader) Activate(rot[0].Name);
+            if (CopyText(string.Join(";", cmds.ToArray())))
+                Toast.ShowMessage(cmds.Count + L.T(" invitations copiées — Ctrl+V dans le chat de ") + rot[0].Name + L.T(" puis Entrée"), false, 4);
+        }
+
+        public void RunMacro(Macro m) { Macros.Run(this, m); }
+
+        /// <summary>Applique un ordre d'initiative : les persos concernés prennent les places dans cet ordre.</summary>
+        public void ApplyOrder(List<string> order)
+        {
+            List<Member> members = S.GetCurrent().Members;
+            List<int> slots = new List<int>();
+            List<Member> picked = new List<Member>();
+            foreach (string n in order)
+            {
+                int i = members.FindIndex(delegate (Member m) { return string.Equals(m.Name, n, StringComparison.OrdinalIgnoreCase); });
+                if (i >= 0) { slots.Add(i); picked.Add(members[i]); }
+            }
+            slots.Sort();
+            for (int k = 0; k < slots.Count; k++) members[slots[k]] = picked[k];
+            Combat.SuggestedOrder = null;
+            ProfileEdited();
+            Toast.ShowMessage(L.T("Ordre d'initiative mis à jour"), false, 2);
+        }
+
+        // ---------------- sauvegardes locales (une par jour, 10 gardées) ----------------
+
+        public static string BackupDir { get { return System.IO.Path.Combine(Settings.Dir, "sauvegardes"); } }
+
+        void BackupDaily()
+        {
+            if (!S.LocalBackups) return;
+            try
+            {
+                if (!System.IO.File.Exists(Settings.FilePath)) return;
+                System.IO.Directory.CreateDirectory(BackupDir);
+                string target = System.IO.Path.Combine(BackupDir, "config-" + DateTime.Now.ToString("yyyy-MM-dd") + ".json");
+                if (!System.IO.File.Exists(target)) System.IO.File.Copy(Settings.FilePath, target);
+                List<string> files = new List<string>(System.IO.Directory.GetFiles(BackupDir, "config-*.json"));
+                files.Sort();
+                for (int i = 0; i < files.Count - 10; i++) try { System.IO.File.Delete(files[i]); } catch { }
+            }
+            catch (Exception ex) { Program.Log("Sauvegarde locale : " + ex.Message); }
+        }
+
+        public List<string> LocalBackups()
+        {
+            List<string> files = new List<string>();
+            try { if (System.IO.Directory.Exists(BackupDir)) files.AddRange(System.IO.Directory.GetFiles(BackupDir, "config-*.json")); } catch { }
+            files.Sort(); files.Reverse();
+            return files;
+        }
+
+        /// <summary>Remet une sauvegarde locale à la place des réglages, puis redémarre.</summary>
+        public void RestoreLocal(string file)
+        {
+            try
+            {
+                Settings test = Settings.Json().Deserialize<Settings>(System.IO.File.ReadAllText(file, System.Text.Encoding.UTF8));
+                if (test == null) throw new Exception(L.T("fichier vide"));
+                System.IO.File.Copy(file, Settings.FilePath, true);
+                SkipSaveOnExit = true;
+                Restart();
+            }
+            catch (Exception ex) { MessageBox.Show(L.T("Sauvegarde illisible : ") + ex.Message, "Relais"); }
+        }
+
+        /// <summary>Va sur le perso dont la fenêtre clignote depuis le plus longtemps (son tour, une invitation…).</summary>
+        public void GoWaiting()
+        {
+            IntPtr best = IntPtr.Zero; DateTime bt = DateTime.MaxValue;
+            foreach (KeyValuePair<IntPtr, DateTime> kv in flashing) if (kv.Value < bt) { bt = kv.Value; best = kv.Key; }
+            if (best == IntPtr.Zero) { Toast.ShowMessage(L.T("Aucun perso n'attend"), false, 1.5); return; }
+            foreach (GameWindow w in Rotation()) if (w.Handle == best) { Activate(w.Name); return; }
         }
 
         // ---------------- dispositions de fenêtres ----------------
@@ -1284,6 +1385,12 @@ namespace Relais
             Bind(b, S.KeyPreview, delegate { TogglePreviewWall(); });
             Bind(b, S.KeyPalette, delegate { OpenPalette(); });
             Bind(b, S.KeyLastChar, delegate { LastChar(); });
+            Bind(b, S.KeyWaiting, delegate { GoWaiting(); });
+            foreach (Macro mc in S.Macros)
+            {
+                Macro m2 = mc;
+                Bind(b, mc.Hotkey, delegate { RunMacro(m2); });
+            }
             foreach (Profile prof in S.Profiles)
             {
                 string pn = prof.Name;
@@ -1440,8 +1547,11 @@ namespace Relais
             if (!"preview".Equals(except) && Same(S.KeyPreview, id)) return L.T("Aperçus en direct");
             if (!"palette".Equals(except) && Same(S.KeyPalette, id)) return L.T("Palette de commandes");
             if (!"lastchar".Equals(except) && Same(S.KeyLastChar, id)) return L.T("Perso d'avant");
+            if (!"waiting".Equals(except) && Same(S.KeyWaiting, id)) return L.T("Perso qui attend");
             foreach (Profile p in S.Profiles)
                 if (!ReferenceEquals(p, except) && Same(p.Hotkey, id)) return L.T("Profil « ") + p.Name + " »";
+            foreach (Macro m in S.Macros)
+                if (!ReferenceEquals(m, except) && Same(m.Hotkey, id)) return L.T("Commande « ") + m.Name + " »";
             return null;
         }
 

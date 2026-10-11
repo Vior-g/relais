@@ -33,6 +33,9 @@ namespace Relais
         FlatButton bCorner;
         Slider sOpacity;
         Toggle tWheel, tCombat, tAlmanax, tPhone, tAutoSync;
+        Toggle tInvGroup, tInvLeader, tPerfShow, tPerfTrim, tBackups, tOrder;
+        NumericUpDown nTrim;
+        RowList macroList;
         DropButton dLayoutScreen, dPreviewScreen, dLang;
         Label lPhone, lSync;
         TextBox tbToken;
@@ -55,6 +58,7 @@ namespace Relais
             DoubleBuffered = true;
             Build();
             app.StateChanged += delegate { if (Visible) { list.Invalidate(); UpdateStatus(); } };
+            app.PerfChanged += delegate { if (Visible) { list.Invalidate(); UpdateStatus(); } };
             app.ProfileChanged += delegate { LoadAll(); };
             LoadAll();
         }
@@ -348,7 +352,7 @@ namespace Relais
             Panel page = Page();
             page.AutoScroll = true;
 
-            TableLayoutPanel kt = Grid(4, 6, 42);
+            TableLayoutPanel kt = Grid(4, 7, 42);
             // (ligne 6 : palette)
             kt.ColumnStyles.Clear();
             kt.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
@@ -367,6 +371,7 @@ namespace Relais
             AddKey(kt, 2, 4, L.T("Aperçus en direct"), "preview");
             AddKey(kt, 0, 5, L.T("Perso d'avant"), "lastchar");
             AddKey(kt, 2, 5, L.T("Palette (en jeu)"), "palette");
+            AddKey(kt, 0, 6, L.T("Perso qui attend"), "waiting");
 
             profileKeys = new TableLayoutPanel();
             profileKeys.ColumnCount = 2;
@@ -386,7 +391,46 @@ namespace Relais
             };
             tWheel.CheckedChanged += delegate { if (!loading) { app.S.WheelCycle = tWheel.Checked; app.ProfileEdited(); } };
 
+            // --- invitations
+            TableLayoutPanel inv = Grid(2, 1, 34);
+            tInvGroup = AddToggle(inv, 0, 0, L.T("Toutes les invitations en une fois"));
+            tInvLeader = AddToggle(inv, 1, 0, L.T("Aller sur le chef avant"));
+            tInvGroup.CheckedChanged += delegate { if (!loading) { app.S.InviteGrouped = tInvGroup.Checked; app.S.Save(); } };
+            tInvLeader.CheckedChanged += delegate { if (!loading) { app.S.InviteGoLeader = tInvLeader.Checked; app.S.Save(); } };
+            Label invHint = Hint(L.T("Dofus 3.7+ : les commandes s'enchaînent avec « ; ». Un seul clic (ou raccourci « Invitation suivante ») copie « /invite B;/invite C;/invite D » et t'emmène sur le chef : colle (Ctrl+V) puis Entrée. Décoche pour l'ancien mode, une invitation à la fois."));
+            invHint.Height = Theme.S(56);
+
+            // --- commandes de chat
+            macroList = new RowList();
+            macroList.Empty = L.T("Aucune commande. Exemple : « /invite {chaque} » invite tout le monde d'un coup.");
+            macroList.CountF = delegate { return app.S.Macros.Count; };
+            macroList.Title = delegate (int i)
+            {
+                Macro mc = app.S.Macros[i];
+                Hotkey h = Hotkey.Parse(mc.Hotkey);
+                return L.T(mc.Name) + (h != null ? "   ·   " + h.Display() : "");
+            };
+            macroList.Sub = delegate (int i) { return Macros.Preview(app, app.S.Macros[i]); };
+            macroList.Buttons = delegate (int i) { return new string[] { L.T("Copier"), L.T("Modifier"), "✕" }; };
+            macroList.OnButton = delegate (int i, int b)
+            {
+                Macro mc = app.S.Macros[i];
+                if (b == 0) app.RunMacro(mc);
+                else if (b == 1) EditMacro(mc);
+                else if (MessageBox.Show(this, L.T("Supprimer la commande « ") + mc.Name + " » ?", "Relais", MessageBoxButtons.YesNo) == DialogResult.Yes)
+                { app.S.Macros.RemoveAt(i); app.ProfileEdited(); RefreshMacros(); }
+            };
+            Panel macroBtns = new Panel(); macroBtns.Height = Theme.S(44);
+            FlatButton bNewMacro = new FlatButton(L.T("+ Nouvelle commande"));
+            macroBtns.Controls.Add(bNewMacro);
+            macroBtns.Resize += delegate { bNewMacro.SetBounds(0, Theme.S(6), Theme.S(200), Theme.S(32)); };
+            bNewMacro.Click += delegate { EditMacro(null); };
+            Label macroHint = Hint(L.T("Relais copie le texte, tu le colles toi-même dans le chat : rien n'est envoyé au jeu. Jokers : {chaque} (chaque autre perso), {chef}, {perso}, {team}. Les commandes sont aussi dans la palette Ctrl+K."));
+            macroHint.Height = Theme.S(40);
+
             StackTop(page,
+                SectionTitle(L.T("Invitations de groupe")), inv, invHint,
+                SectionTitle(L.T("Commandes de chat")), macroList, macroBtns, macroHint,
                 SectionTitle(L.T("Souris")), mouse,
                 Hint(L.T("La molette seule reste au jeu : Relais ne réagit qu'avec Alt enfoncé. Les boutons latéraux (4 et 5) et le clic molette peuvent aussi servir de raccourci partout ci-dessous.")),
                 SectionTitle(L.T("Raccourcis généraux")), kt,
@@ -471,7 +515,29 @@ namespace Relais
                 other.SetBounds(x + Theme.S(6), (accent.Height - Theme.S(30)) / 2, Theme.S(80), Theme.S(30));
             };
 
-            TableLayoutPanel appg = Grid(2, 1, 32);
+            TableLayoutPanel appg = Grid(2, 2, 32);
+            tBackups = AddToggle(appg, 0, 1, L.T("Sauvegarde locale chaque jour"));
+            tBackups.CheckedChanged += delegate { if (!loading) { app.S.LocalBackups = tBackups.Checked; app.S.Save(); } };
+            FlatButton bRestoreLocal = new FlatButton(L.T("Restaurer une sauvegarde…"));
+            bRestoreLocal.Dock = DockStyle.Fill; bRestoreLocal.Margin = new Padding(0, Theme.S(2), Theme.S(12), Theme.S(2));
+            appg.Controls.Add(bRestoreLocal, 1, 1);
+            bRestoreLocal.Click += delegate
+            {
+                ContextMenuStrip cm = new ContextMenuStrip();
+                List<string> files = app.LocalBackups();
+                if (files.Count == 0) cm.Items.Add(L.T("Aucune sauvegarde pour l'instant")).Enabled = false;
+                foreach (string f in files)
+                {
+                    string ff = f;
+                    string day = Path.GetFileNameWithoutExtension(f).Replace("config-", "");
+                    cm.Items.Add(day, null, delegate
+                    {
+                        if (MessageBox.Show(this, L.T("Remettre les réglages du ") + day + L.T(" ? Relais redémarrera."), "Relais", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                            app.RestoreLocal(ff);
+                    });
+                }
+                cm.Show(bRestoreLocal, new Point(0, bRestoreLocal.Height));
+            };
             tStartup = AddToggle(appg, 0, 0, L.T("Lancer avec Windows"));
             tTray = AddToggle(appg, 1, 0, L.T("Fermer = réduire en icône"));
 
@@ -637,8 +703,35 @@ namespace Relais
             tAlmanax = AddToggle(cmb, 1, 0, L.T("Almanax du jour sur l'accueil"));
             tCombat.CheckedChanged += delegate { if (!loading) { app.S.CombatTracking = tCombat.Checked; app.S.Save(); if (!tCombat.Checked) app.Combat.EndNow(); } };
             tAlmanax.CheckedChanged += delegate { if (!loading) { app.S.AlmanaxShow = tAlmanax.Checked; app.ProfileEdited(); } };
+            tOrder = new Toggle(L.T("Proposer l'ordre d'initiative vu en combat"));
+            tOrder.CheckedChanged += delegate { if (!loading) { app.S.SuggestOrder = tOrder.Checked; app.S.Save(); } };
             Label cmbHint = Hint(L.T("Le combat est repéré grâce aux alertes de tour (fenêtres qui clignotent) : la mini-barre affiche le tour et le chrono, et un repère sous le perso qui joue. Bilan dans Stats."));
             cmbHint.Height = Theme.S(40);
+
+            // --- mémoire & processeur
+            TableLayoutPanel perfG = Grid(2, 1, 32);
+            tPerfShow = AddToggle(perfG, 0, 0, L.T("Afficher mémoire et CPU par perso"));
+            FlatButton bTrim = new FlatButton(L.T("Libérer la mémoire maintenant"));
+            bTrim.Dock = DockStyle.Fill; bTrim.Margin = new Padding(0, Theme.S(2), Theme.S(12), Theme.S(2));
+            perfG.Controls.Add(bTrim, 1, 0);
+            bTrim.Click += delegate { app.Perf.Trim(true); };
+            tPerfShow.CheckedChanged += delegate { if (!loading) { app.S.PerfShow = tPerfShow.Checked; app.S.Save(); list.Invalidate(); UpdateStatus(); } };
+            Panel trimRow = new Panel(); trimRow.Height = Theme.S(36);
+            tPerfTrim = new Toggle(L.T("Libérer automatiquement toutes les"));
+            nTrim = new NumericUpDown(); nTrim.Minimum = 2; nTrim.Maximum = 120;
+            nTrim.BackColor = Theme.Panel2; nTrim.ForeColor = Theme.Text; nTrim.BorderStyle = BorderStyle.FixedSingle;
+            Label lTrim = new Label(); lTrim.Text = L.T("min (fenêtres en arrière-plan)"); lTrim.ForeColor = Theme.Muted; lTrim.TextAlign = ContentAlignment.MiddleLeft;
+            trimRow.Controls.Add(tPerfTrim); trimRow.Controls.Add(nTrim); trimRow.Controls.Add(lTrim);
+            trimRow.Resize += delegate
+            {
+                tPerfTrim.SetBounds(0, Theme.S(4), Theme.S(290), Theme.S(28));
+                nTrim.SetBounds(Theme.S(294), Theme.S(6), Theme.S(56), Theme.S(26));
+                lTrim.SetBounds(Theme.S(356), Theme.S(4), Math.Max(10, trimRow.Width - Theme.S(356)), Theme.S(28));
+            };
+            tPerfTrim.CheckedChanged += delegate { if (!loading) { app.S.PerfTrim = tPerfTrim.Checked; app.S.Save(); } };
+            nTrim.ValueChanged += delegate { if (!loading) { app.S.PerfTrimMinutes = (int)nTrim.Value; app.S.Save(); } };
+            Label perfHint2 = Hint(L.T("Chaque client Dofus garde beaucoup de mémoire. « Libérer » rend à Windows celle des fenêtres en arrière-plan (le perso au premier plan n'est jamais touché) ; le jeu la reprend tout seul si besoin."));
+            perfHint2.Height = Theme.S(40);
 
             // --- écrans
             dLayoutScreen = new DropButton(); dPreviewScreen = new DropButton();
@@ -743,7 +836,8 @@ namespace Relais
             StackTop(page,
                 SectionTitle(L.T("Soutenir Relais")), sup, supHint,
                 SectionTitle(L.T("Comportement")), behav, turnHint,
-                SectionTitle(L.T("Combats & accueil")), cmb, cmbHint,
+                SectionTitle(L.T("Combats & accueil")), cmb, Wrap(tOrder), cmbHint,
+                SectionTitle(L.T("Mémoire & processeur")), perfG, trimRow, perfHint2,
                 SectionTitle(L.T("Performance & son")), perf, perfHint,
                 SectionTitle(L.T("Mini-barre")), bar, sOpacity,
                 SectionTitle(L.T("Vignettes en jeu")), ov, ovHint,
@@ -810,6 +904,7 @@ namespace Relais
                 case "preview": return app.S.KeyPreview;
                 case "lastchar": return app.S.KeyLastChar;
                 case "palette": return app.S.KeyPalette;
+                case "waiting": return app.S.KeyWaiting;
             }
             return null;
         }
@@ -830,6 +925,7 @@ namespace Relais
                 case "preview": app.S.KeyPreview = v; break;
                 case "lastchar": app.S.KeyLastChar = v; break;
                 case "palette": app.S.KeyPalette = v; break;
+                case "waiting": app.S.KeyWaiting = v; break;
             }
         }
 
@@ -927,6 +1023,14 @@ namespace Relais
             if (!tbNtfy.Focused) tbNtfy.Text = app.S.NtfyTopic ?? "";
             if (!tbRepo.Focused) tbRepo.Text = app.S.UpdateRepo ?? "";
             tWheel.Checked = app.S.WheelCycle;
+            tInvGroup.Checked = app.S.InviteGrouped;
+            tInvLeader.Checked = app.S.InviteGoLeader;
+            tPerfShow.Checked = app.S.PerfShow;
+            tPerfTrim.Checked = app.S.PerfTrim;
+            nTrim.Value = Math.Max(2, Math.Min(120, app.S.PerfTrimMinutes));
+            tBackups.Checked = app.S.LocalBackups;
+            tOrder.Checked = app.S.SuggestOrder;
+            RefreshMacros();
             tCombat.Checked = app.S.CombatTracking;
             tAlmanax.Checked = app.S.AlmanaxShow;
             tPhone.Checked = app.S.PhoneRemote;
@@ -949,7 +1053,8 @@ namespace Relais
             int inRot = app.Rotation().Count;
             string s = online == 0
                 ? L.T("Aucune fenêtre Dofus connectée détectée — connecte tes persos, ils apparaîtront ici.")
-                : online + L.T(" perso") + (online > 1 ? "s" : "") + L.T(" connecté") + (online > 1 ? "s" : "") + " · " + inRot + L.T(" dans la rotation · profil « ") + app.S.GetCurrent().Name + " »";
+                : online + L.T(" perso") + (online > 1 ? "s" : "") + L.T(" connecté") + (online > 1 && !L.En ? "s" : "") + " · " + inRot + L.T(" dans la rotation · profil « ") + app.S.GetCurrent().Name + " »";
+            if (online > 0 && app.S.PerfShow && app.Perf != null && app.Perf.TotalRam > 0) s += L.T(" · mémoire Dofus ") + Fmt.Bytes(app.Perf.TotalRam);
             if (app.Paused) s = L.T("EN PAUSE · ") + s;
             status.Text = s;
             status.ForeColor = app.Paused ? Theme.Accent : Theme.Muted;
@@ -1020,6 +1125,38 @@ namespace Relais
                 c.SetBounds(lw, Theme.S(4), Math.Max(Theme.S(120), Math.Min(Theme.S(380), row.Width - lw - Theme.S(12))), Theme.S(32));
             };
             return row;
+        }
+
+        static Panel Wrap(Control c)
+        {
+            Panel p = new Panel(); p.Height = Theme.S(34);
+            c.Dock = DockStyle.Fill; p.Padding = new Padding(Theme.S(3), Theme.S(2), 0, Theme.S(2));
+            p.Controls.Add(c);
+            return p;
+        }
+
+        void RefreshMacros()
+        {
+            macroList.Height = macroList.WantedHeight;
+            macroList.Invalidate();
+        }
+
+        void EditMacro(Macro src)
+        {
+            using (MacroForm f = new MacroForm(app, src))
+            {
+                if (f.ShowDialog(this) != DialogResult.OK) return;
+                string owner = app.Owner(f.Result.Hotkey, src);
+                if (owner != null)
+                {
+                    MessageBox.Show(this, L.T("Ce raccourci est déjà utilisé par « ") + owner + " ».", "Relais", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    f.Result.Hotkey = src != null ? src.Hotkey : null;
+                }
+                if (src == null) app.S.Macros.Add(f.Result);
+                else { src.Name = f.Result.Name; src.Text = f.Result.Text; src.Hotkey = f.Result.Hotkey; src.SwitchToLeader = f.Result.SwitchToLeader; }
+                app.ProfileEdited();
+                RefreshMacros();
+            }
         }
 
         static string ScreenAt(int index)

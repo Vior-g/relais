@@ -162,11 +162,18 @@ namespace Relais
 
             // infos
             TableLayoutPanel info = new TableLayoutPanel();
-            info.ColumnCount = 2; info.RowCount = 3;
+            info.ColumnCount = 2; info.RowCount = 4;
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Theme.S(110)));
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            for (int i = 0; i < 3; i++) info.RowStyles.Add(new RowStyle(SizeType.Absolute, Theme.S(36)));
-            info.Height = Theme.S(108);
+            for (int i = 0; i < 4; i++) info.RowStyles.Add(new RowStyle(SizeType.Absolute, Theme.S(36)));
+            info.Height = Theme.S(144);
+            TextBox kamas = UiKit.Input(); kamas.Dock = DockStyle.Fill;
+            kamas.Text = sheet.Kamas > 0 ? Fmt.Kamas(sheet.Kamas) : "";
+            kamas.Leave += delegate
+            {
+                long v;
+                if (Fmt.TryParseKamas(kamas.Text, out v)) { sheet.Kamas = v; kamas.Text = v > 0 ? Fmt.Kamas(v) : ""; Save(); }
+            };
             NumericUpDown lvl = new NumericUpDown();
             lvl.Minimum = 0; lvl.Maximum = 200; lvl.Value = Math.Max(0, Math.Min(200, sheet.Level));
             lvl.BackColor = Theme.Panel2; lvl.ForeColor = Theme.Text; lvl.BorderStyle = BorderStyle.FixedSingle; lvl.Width = Theme.S(80);
@@ -195,6 +202,7 @@ namespace Relais
             info.Controls.Add(Lbl(L.T("Niveau")), 0, 0); info.Controls.Add(lvl, 1, 0);
             info.Controls.Add(Lbl(L.T("Métiers")), 0, 1); info.Controls.Add(jobs, 1, 1);
             info.Controls.Add(Lbl(L.T("Stuff (lien)")), 0, 2); info.Controls.Add(linkRow, 1, 2);
+            info.Controls.Add(Lbl(L.T("Kamas")), 0, 3); info.Controls.Add(kamas, 1, 3);
 
             // onglets
             TabStrip tabs = new TabStrip();

@@ -117,6 +117,11 @@ namespace Relais
                 int vol = app.VolumeOf(m.Name);
                 if (vol < 100) sub += L.T(" · son ") + vol + " %";
                 if (app.NoteOf(m.Name) != null) sub += L.T(" · note");
+                if (online && app.S.PerfShow && app.Perf != null)
+                {
+                    PerfMonitor.Sample ps = app.Perf.Of(w.Pid);
+                    if (ps != null) sub += " · " + Fmt.Bytes(ps.Ram) + " · " + Math.Round(ps.Cpu) + L.T(" % CPU");
+                }
                 CharSheet sh;
                 if (app.S.Sheets.TryGetValue(m.Name, out sh) && sh != null && sh.Level > 0) sub = L.T("niv. ") + sh.Level + " · " + sub;
                 using (SolidBrush dot = new SolidBrush(online ? Theme.Green : Theme.Faint))

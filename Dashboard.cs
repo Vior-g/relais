@@ -129,8 +129,39 @@ namespace Relais
                 y += cb.Height + gap;
             }
 
+            // --- ordre d'initiative détecté pendant le dernier combat
+            if (app.Combat.SuggestedOrder != null && !app.Combat.Active)
+            {
+                Rectangle ob = new Rectangle(x0, y, W, Theme.S(48));
+                Card(g, ob, true);
+                Theme.DrawText(g, L.T("Ordre vu en combat : ") + string.Join(" → ", app.Combat.SuggestedOrder.ToArray()), Theme.Bold, Theme.Text,
+                    new Rectangle(ob.X + Theme.S(16), ob.Y, ob.Width - Theme.S(270), ob.Height), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                Rectangle ap = new Rectangle(ob.Right - Theme.S(250), ob.Y + Theme.S(9), Theme.S(120), Theme.S(30));
+                Rectangle ig = new Rectangle(ob.Right - Theme.S(122), ob.Y + Theme.S(9), Theme.S(108), Theme.S(30));
+                Theme.FillRound(g, Hovered(ap) ? ControlPaint.Light(Theme.Accent, 0.3f) : Theme.Accent, ap, Theme.S(8));
+                Theme.DrawText(g, L.T("Appliquer"), Theme.Bold, Theme.OnAccent, ap, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                Theme.FillRound(g, Hovered(ig) ? Theme.Hover : Theme.Panel2, ig, Theme.S(8));
+                Theme.DrawText(g, L.T("Ignorer"), Theme.Normal, Theme.Text, ig, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                AddHit(ap, delegate { app.ApplyOrder(app.Combat.SuggestedOrder); }, null, L.T("Ranger la team dans l'ordre d'initiative du dernier combat"));
+                AddHit(ig, delegate { app.Combat.SuggestedOrder = null; Invalidate(); }, null, null);
+                y += ob.Height + gap;
+            }
+
             // --- cartes de la team
             Heading(g, L.T("Ta team"), x0, y, W);
+            {
+                long totalK = 0; int lvSum = 0, lvN = 0;
+                foreach (GameWindow tw in rot)
+                {
+                    CharSheet tsh;
+                    if (!app.S.Sheets.TryGetValue(tw.Name, out tsh) || tsh == null) continue;
+                    totalK += tsh.Kamas;
+                    if (tsh.Level > 0) { lvSum += tsh.Level; lvN++; }
+                }
+                string sum = (lvN > 0 ? L.T("niv. moyen ") + (lvSum / lvN) : "") + (totalK > 0 ? (lvN > 0 ? " · " : "") + Fmt.Kamas(totalK) + L.T(" kamas") : "");
+                if (sum.Length > 0)
+                    Theme.DrawText(g, sum, Theme.Small, Theme.Muted, new Rectangle(x0 + W / 2, y, W / 2, Theme.S(20)), TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+            }
             y += Theme.S(28);
             if (rot.Count == 0)
             {
@@ -412,6 +443,11 @@ namespace Relais
     public sealed class WhatsNew : Form
     {
         public static readonly string[][] Notes = {
+            new string[] { "2.4", "Invitations en un clic (Dofus 3.7+) : « /invite B;/invite C;/invite D » copié et direction le chef, il n'y a plus qu'à coller.",
+                "Commandes de chat personnalisées avec jokers ({chaque}, {chef}, {perso}, {team}), raccourcis et palette.",
+                "Ordre d'initiative détecté pendant les combats : un clic pour ranger la team.",
+                "Mémoire et CPU de chaque client, bouton « Libérer la mémoire » (et mode automatique).",
+                "Raccourci « Perso qui attend », kamas dans les fiches (total sur l'accueil), sauvegarde locale quotidienne." },
             new string[] { "2.3", L.T("Combats : la mini-barre affiche le tour et le chrono, un repère sous le perso qui joue, et le bilan arrive dans Stats."),
                 L.T("Almanax du jour sur l'accueil, avec une case par perso pour ne plus en oublier."),
                 L.T("Télécommande : change de perso depuis ton téléphone (QR code dans Options)."),
@@ -454,9 +490,10 @@ namespace Relais
                     for (int i = 1; i < v.Length; i++)
                     {
                         Rectangle r = new Rectangle(Theme.S(16), y, body.Width - Theme.S(36), Theme.S(200));
-                        Size sz = TextRenderer.MeasureText(g, v[i], Theme.Normal, new Size(r.Width, 1000), TextFormatFlags.WordBreak);
+                        string note = L.T(v[i]);
+                        Size sz = TextRenderer.MeasureText(g, note, Theme.Normal, new Size(r.Width, 1000), TextFormatFlags.WordBreak);
                         Brand.Diamond(g, Theme.AccentSoft, Theme.S(6), y + Theme.S(9), Theme.S(3));
-                        TextRenderer.DrawText(g, v[i], Theme.Normal, new Rectangle(r.X, y, r.Width, sz.Height), Theme.Text, TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
+                        TextRenderer.DrawText(g, note, Theme.Normal, new Rectangle(r.X, y, r.Width, sz.Height), Theme.Text, TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
                         y += sz.Height + Theme.S(6);
                     }
                     y += Theme.S(10);

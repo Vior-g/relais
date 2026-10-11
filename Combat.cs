@@ -17,6 +17,9 @@ namespace Relais
         public string Current { get; private set; }
         int lastIndex = -1;
         int turns;
+        readonly List<string> seq = new List<string>();
+        /// <summary>Ordre d'initiative observé au dernier combat (s'il diffère de l'ordre actuel), sinon null.</summary>
+        public List<string> SuggestedOrder;
 
         /// <summary>Délai sans alerte de tour après lequel le combat est considéré fini.</summary>
         public static int EndAfterSeconds = 75;
@@ -40,6 +43,7 @@ namespace Relais
             if (!Active)
             {
                 Active = true; Start = now; Round = 1; lastIndex = idx; turns = 1;
+                seq.Clear();
                 app.Record("combat", L.T("Combat commencé"));
             }
             else if (!string.Equals(Current, name, StringComparison.OrdinalIgnoreCase))
@@ -49,6 +53,7 @@ namespace Relais
                 turns++;
             }
             Current = name;
+            if (seq.Count == 0 || !string.Equals(seq[seq.Count - 1], name, StringComparison.OrdinalIgnoreCase)) seq.Add(name);
             lastSignal = now;
             Fire();
         }
@@ -83,9 +88,38 @@ namespace Relais
                 for (int i = 0; i < keys.Count - 366; i++) app.S.Combat.Remove(keys[i]);
             }
             app.S.Save();
+            DetectOrder();
             app.Record("combat", L.T("Combat fini : ") + Round + L.T(" tour(s), ") + Fmt.Duration(secs));
             Current = null;
             Fire();
+        }
+
+        /// <summary>
+        /// L'ordre dans lequel les persos ont été appelés = l'ordre d'initiative (cyclique).
+        /// On le cale sur le chef actuel et on le propose s'il diffère de la rotation.
+        /// </summary>
+        void DetectOrder()
+        {
+            if (!app.S.SuggestOrder) return;
+            List<GameWindow> rot = app.Rotation();
+            if (rot.Count < 2) return;
+            List<string> distinct = new List<string>();
+            foreach (string n in seq)
+            {
+                bool dup = false;
+                foreach (string d in distinct) if (string.Equals(d, n, StringComparison.OrdinalIgnoreCase)) dup = true;
+                if (!dup) distinct.Add(n);
+            }
+            if (distinct.Count != rot.Count) return; // il manque quelqu'un : pas assez sûr
+            int lead = distinct.FindIndex(delegate (string n) { return string.Equals(n, rot[0].Name, StringComparison.OrdinalIgnoreCase); });
+            if (lead < 0) return;
+            List<string> order = new List<string>();
+            for (int i = 0; i < distinct.Count; i++) order.Add(distinct[(lead + i) % distinct.Count]);
+            bool same = true;
+            for (int i = 0; i < rot.Count; i++) if (!string.Equals(order[i], rot[i].Name, StringComparison.OrdinalIgnoreCase)) same = false;
+            if (same) return;
+            SuggestedOrder = order;
+            app.Record("info", L.T("Ordre d'initiative détecté : ") + string.Join(" → ", order.ToArray()));
         }
 
         void Fire() { if (Changed != null) Changed(this, EventArgs.Empty); }

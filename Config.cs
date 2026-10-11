@@ -144,6 +144,7 @@ namespace Relais
         public int Level { get; set; }
         public string Jobs { get; set; }
         public string StuffLink { get; set; }
+        public long Kamas { get; set; }
         public List<CheckItem> Goals { get; set; }
         public List<CheckItem> Daily { get; set; }
         public List<CheckItem> Dungeons { get; set; }
@@ -155,6 +156,15 @@ namespace Relais
             if (Daily == null) Daily = new List<CheckItem>();
             if (Dungeons == null) Dungeons = new List<CheckItem>();
         }
+    }
+
+    /// <summary>Commande de chat prête à coller (avec {chaque}, {chef}, {perso}, {team}).</summary>
+    public sealed class Macro
+    {
+        public string Name { get; set; }
+        public string Text { get; set; }
+        public string Hotkey { get; set; }
+        public bool SwitchToLeader { get; set; }
     }
 
     /// <summary>Bilan des combats d'une journée.</summary>
@@ -299,6 +309,18 @@ namespace Relais
         public bool AutoSync { get; set; }
         public string Language { get; set; }             // "fr" ou "en"
 
+        // v2.4
+        public bool InviteGrouped { get; set; }          // toutes les invitations en une ligne « ; » (Dofus 3.7+)
+        public bool InviteGoLeader { get; set; }         // aller sur le chef avant de copier
+        public List<Macro> Macros { get; set; }
+        public bool MacrosSeeded { get; set; }
+        public bool PerfShow { get; set; }               // RAM / CPU par perso
+        public bool PerfTrim { get; set; }               // libérer la mémoire des fenêtres en arrière-plan
+        public int PerfTrimMinutes { get; set; }
+        public bool LocalBackups { get; set; }
+        public string KeyWaiting { get; set; }           // aller au perso qui attend (fenêtre qui clignote)
+        public bool SuggestOrder { get; set; }           // proposer l'ordre d'initiative vu en combat
+
         public bool OnlyWhenDofusFocused { get; set; }
         public bool AutoAddNewCharacters { get; set; }
         public bool ShowBar { get; set; }
@@ -350,6 +372,12 @@ namespace Relais
             AlmanaxShow = true;
             PhonePort = 8754;
             Language = "fr";
+            InviteGrouped = true;
+            InviteGoLeader = true;
+            PerfShow = true;
+            PerfTrimMinutes = 10;
+            LocalBackups = true;
+            SuggestOrder = true;
             Fix();
         }
 
@@ -382,6 +410,9 @@ namespace Relais
             if (PreviewScreen == null) PreviewScreen = "";
             if (LayoutScreen == null) LayoutScreen = "";
             if (string.IsNullOrEmpty(UpdateRepo)) UpdateRepo = Links.Repo;
+            if (Macros == null) Macros = new List<Macro>();
+            if (!MacrosSeeded) { Macros.AddRange(Relais.Macros.Presets()); MacrosSeeded = true; }
+            if (PerfTrimMinutes < 2 || PerfTrimMinutes > 120) PerfTrimMinutes = 10;
         }
 
         static Dictionary<string, T> CI<T>(Dictionary<string, T> d)

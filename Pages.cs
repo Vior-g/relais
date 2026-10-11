@@ -126,6 +126,37 @@ namespace Relais
 
     public static class Fmt
     {
+        /// <summary>12 400 000 → « 12,4 M » ; 85 000 → « 85 k ».</summary>
+        public static string Kamas(long k)
+        {
+            System.Globalization.CultureInfo ci = System.Globalization.CultureInfo.GetCultureInfo(L.En ? "en-GB" : "fr-FR");
+            if (k >= 1000000) return (k / 1000000.0).ToString(k >= 100000000 ? "0" : "0.#", ci) + " M";
+            if (k >= 10000) return (k / 1000.0).ToString("0", ci) + " k";
+            return k.ToString("N0", ci);
+        }
+
+        /// <summary>Accepte « 1,5M », « 800k », « 1 200 000 », « 1.2m ».</summary>
+        public static bool TryParseKamas(string s, out long v)
+        {
+            v = 0;
+            string t = (s ?? "").Trim().ToLowerInvariant().Replace(" ", "").Replace("\u00a0", "").Replace("\u202f", "").Replace("kamas", "").Replace("k", "000").Replace(",", ".");
+            if (t.Length == 0) return true;
+            double mult = 1;
+            if (t.EndsWith("m")) { mult = 1000000; t = t.Substring(0, t.Length - 1); }
+            if (t.EndsWith("000") && t.Contains(".") && mult == 1) { mult = 1000; t = t.Substring(0, t.Length - 3); }
+            double d;
+            if (!double.TryParse(t, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out d) || d < 0) return false;
+            v = (long)Math.Round(d * mult);
+            return true;
+        }
+
+        public static string Bytes(long b)
+        {
+            System.Globalization.CultureInfo ci = System.Globalization.CultureInfo.GetCultureInfo(L.En ? "en-GB" : "fr-FR");
+            if (b >= 1L << 30) return (b / (double)(1L << 30)).ToString("0.0", ci) + (L.En ? " GB" : " Go");
+            return (b / (double)(1 << 20)).ToString("0", ci) + (L.En ? " MB" : " Mo");
+        }
+
         public static string Duration(double seconds)
         {
             if (seconds < 0) seconds = 0;
