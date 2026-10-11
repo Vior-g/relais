@@ -2,7 +2,7 @@
 # et publie Relais.exe + Relais-Setup.exe dans une Release (ce qui alimente les mises à jour auto).
 #
 # Deux façons de publier une version :
-#  - GitHub Desktop : créer un tag « v2.0.2 » sur le dernier commit, puis « Push origin »
+#  - GitHub Desktop : créer un tag « v2.0.2 » (v minuscule, sans point après le v) sur le dernier commit, puis « Push origin »
 #    -> la Release est créée automatiquement avec les fichiers.
 #  - Site github.com : Releases > Draft a new release > tag « v2.0.2 » > Publish release.
 name: Build Relais
@@ -30,14 +30,16 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Numéro de version depuis le tag (v2.0.2 -> 2.0.2.0)
+      - name: Numéro de version depuis le tag (v2.4.0 -> 2.4.0.0)
         if: env.IS_RELEASE == 'true'
         shell: pwsh
         run: |
-          $v = "$env:TAG".TrimStart('v','V')
-          $parts = @($v.Split('-')[0].Split('.'))
+          # Accepte v2.4.0, V2.4.0, v.2.4.0, 2.4.0, v2.4… : on ne garde que les chiffres.
+          $m = [regex]::Match("$env:TAG", '\d+(\.\d+){0,3}')
+          if (-not $m.Success) { Write-Host "Tag sans numéro de version : AssemblyInfo.cs inchangé"; exit 0 }
+          $parts = @($m.Value.Split('.'))
           while ($parts.Count -lt 4) { $parts += '0' }
           $full = ($parts[0..3] -join '.')
           (Get-Content AssemblyInfo.cs -Encoding UTF8) -replace '\d+\.\d+\.\d+\.\d+', $full | Set-Content AssemblyInfo.cs -Encoding UTF8

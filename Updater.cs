@@ -51,9 +51,11 @@ namespace Relais
 
         public static Version ParseTag(string tag)
         {
-            string t = (tag ?? "").Trim().TrimStart('v', 'V');
-            int cut = t.IndexOfAny(new char[] { '-', '+', ' ' });
-            if (cut > 0) t = t.Substring(0, cut);
+            // tolère « v2.4.0 », « V2.4 », « v.2.4.0 », « 2.4.0-beta »…
+            System.Text.RegularExpressions.Match mt = System.Text.RegularExpressions.Regex.Match(tag ?? "", @"\d+(\.\d+){0,3}");
+            if (!mt.Success) return null;
+            string t = mt.Value;
+            if (t.IndexOf('.') < 0) t += ".0";
             Version v;
             if (!Version.TryParse(t, out v)) return null;
             return new Version(v.Major, v.Minor, Math.Max(0, v.Build), Math.Max(0, v.Revision));
